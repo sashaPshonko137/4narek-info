@@ -273,24 +273,24 @@ func updateTelegramMessage(ctx context.Context) {
 }
 
 func generateMessageText() string {
-	today := time.Now().In(loc).Format("2006-01-02")
-	return fmt.Sprintf("🗡 Статистика за %s:\n\n"+
-		"5nm: %d/%d\n7nm: %d/%d\n"+
-		"5: %d/%d\n6: %d/%d\n"+
-		"7: %d/%d\nMEGA: %d/%d\n\n"+
-		"Ботинки: %d/%d\nШлем: %d/%d\n"+
-		"Нагрудник: %d/%d\nШтаны: %d/%d",
-		today,
-		data.Swords.Sword5nmBuy, data.Swords.Sword5nmSell, 
-		data.Swords.Sword7nmBuy, data.Swords.Sword7nmSell,
-		data.Swords.Sword5Buy, data.Swords.Sword5Sell, 
-		data.Swords.Sword6Buy, data.Swords.Sword6Sell,
-		data.Swords.Sword7Buy, data.Swords.Sword7Sell, 
-		data.Swords.MegaswordBuy, data.Swords.MegaswordSell,
-		data.Swords.NetheriteBootsBuy, data.Swords.NetheriteBootsSell, 
-		data.Swords.NetheriteHelmetBuy, data.Swords.NetheriteHelmetSell,
-		data.Swords.NetheriteChestplateBuy, data.Swords.NetheriteChestplateSell, 
-		data.Swords.NetheriteLeggingsBuy, data.Swords.NetheriteLeggingsSell)
+  today := time.Now().In(loc).Format("2006-01-02")
+  return fmt.Sprintf("🗡 Статистика за %s:\n\n"+
+    "5nm: %d/%d\n5: %d/%d \n"+
+    "6: %d/%d\n+7nm: %d/%d\n"+
+    "7: %d/%d\nMEGA: %d/%d\n\n"+
+    "Ботинки: %d/%d\nШлем: %d/%d\n"+
+    "Нагрудник: %d/%d\nШтаны: %d/%d",
+    today,
+    data.Swords.Sword5nmBuy, data.Swords.Sword5nmSell, 
+    data.Swords.Sword5Buy, data.Swords.Sword5Sell, 
+    data.Swords.Sword6Buy, data.Swords.Sword6Sell,
+    data.Swords.Sword7nmBuy, data.Swords.Sword7nmSell,
+    data.Swords.Sword7Buy, data.Swords.Sword7Sell, 
+    data.Swords.MegaswordBuy, data.Swords.MegaswordSell,
+    data.Swords.NetheriteBootsBuy, data.Swords.NetheriteBootsSell, 
+    data.Swords.NetheriteHelmetBuy, data.Swords.NetheriteHelmetSell,
+    data.Swords.NetheriteChestplateBuy, data.Swords.NetheriteChestplateSell, 
+    data.Swords.NetheriteLeggingsBuy, data.Swords.NetheriteLeggingsSell)
 }
 
 func dailyResetChecker(ctx context.Context) {
