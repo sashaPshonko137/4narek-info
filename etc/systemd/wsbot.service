@@ -1,0 +1,12 @@
+[Unit]
+Description=WebSocket Price Bot
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/yourproject
+ExecStart=/usr/bin/go run /home/ubuntu/yourproject/main.go
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
