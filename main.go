@@ -108,6 +108,14 @@ var (
 
 	currentDay string
 	dailyData  DailyData
+
+	swordTimes = map[string]time.Time{
+		"sword5": time.Now(),
+		"sword6": time.Now(),
+		"sword7": time.Now(),
+		"pochti-megasword": time.Now(),
+		"megasword": time.Now(),
+	}
 )
 
 func main() {
@@ -293,6 +301,13 @@ func adjustPrice(item string) {
             sellCount += data.SellStats[t]
         }
     }
+
+	if swordTimes[item].Add(itemsConfig[item].AnalysisTime).Before(time.Now()) {
+    	if buyCount < itemsConfig[item].NormalSales {
+			return
+		}
+		swordTimes[item] = time.Now()
+	}
 
     // Изменяем цену по правилам
     newPrice := data.Prices[item]
