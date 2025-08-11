@@ -7,278 +7,356 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/signal"
-	"sort"
 	"sync"
 	"time"
 
 	"github.com/go-telegram/bot"
+	"github.com/gorilla/websocket"
 )
 
 const (
 	token    = "7209712528:AAF7o20ysTcpgQb8JlVH4_CLmqH_iz5GiL8"
-	chatID   = -4709535234
+	chatID   = -4709535234 // Ваш чат ID
 	timezone = "Asia/Tashkent"
 )
 
+var (
+	upgrader = websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool { return true },
+	}
+	tgBot *bot.Bot
+)
+
+type ItemConfig struct {
+	BasePrice    int
+	NormalSales  int
+	PriceStep    int
+	AnalysisTime time.Duration
+}
+
 type DailyData struct {
-	Date      string          `json:"date"`
-	MessageID int             `json:"message_id"`
-	BuyMap    map[string]int  `json:"buy_map"`
-	SellMap   map[string]int  `json:"sell_map"`
-	LastText  string          `json:"last_text"`
+	Date     string         `json:"date"`
+	Prices   map[string]int `json:"prices"`
+	BuyStats map[string]int `json:"buy_stats"`
+	SellStats map[string]int `json:"sell_stats"`
+	MessageID int           `json:"message_id"`
 }
 
 var (
-	tgBot     *bot.Bot
-	data      DailyData
-	dataMutex sync.Mutex
-	loc       *time.Location
+	itemsConfig = map[string]ItemConfig{
+		"sword5": {
+			BasePrice:    2000000,
+			NormalSales:  3,
+			PriceStep:    100000,
+			AnalysisTime: 5 * time.Minute,
+		},
+		"sword6": {
+			BasePrice:    2600000,
+			NormalSales:  3,
+			PriceStep:    100000,
+			AnalysisTime: 12 * time.Minute,
+		},
+		"sword7": {
+			BasePrice:    3200000,
+			NormalSales:  3,
+			PriceStep:    100000,
+			AnalysisTime: 10 * time.Minute,
+		},
+		"pochti-megasword": {
+			BasePrice:    3900000,
+			NormalSales:  3,
+			PriceStep:    100000,
+			AnalysisTime: 23 * time.Minute,
+		},
+		"megasword": {
+			BasePrice:    5200000,
+			NormalSales:  3,
+			PriceStep:    100000,
+			AnalysisTime: 20 * time.Minute,
+		},
+		"elytra": {
+			BasePrice:    1200000,
+			NormalSales:  3,
+			PriceStep:    100000,
+			AnalysisTime: 7 * time.Minute,
+		},
+		"elytra-mend": {
+			BasePrice:    4500000,
+			NormalSales:  3,
+			PriceStep:    100000,
+			AnalysisTime: 15 * time.Minute,
+		},
+		"elytra-unbreak": {
+			BasePrice:    1700000,
+			NormalSales:  3,
+			PriceStep:    100000,
+			AnalysisTime: 9 * time.Minute,
+		},
+
+	}
+
+	data struct {
+		Prices    map[string]int
+		BuyStats  map[string]int
+		SellStats map[string]int
+		LastTrade map[string]time.Time
+	}
+	dataMu sync.Mutex
+
+	clients   = make(map[*websocket.Conn]bool)
+	clientsMu sync.Mutex
+
+	currentDay string
+	dailyData  DailyData
 )
 
-func init() {
-	var err error
-	loc, err = time.LoadLocation(timezone)
+func main() {
+	loc, err := time.LoadLocation(timezone)
 	if err != nil {
 		log.Fatalf("Error loading location: %v", err)
 	}
-}
 
-func main() {
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-	defer cancel()
-
-	loadData()
-
+	// Инициализация бота Telegram
 	b, err := bot.New(token)
 	if err != nil {
 		log.Fatalf("Error creating bot: %v", err)
 	}
 	tgBot = b
 
-	initTelegramMessage(ctx)
-	http.HandleFunc("/buy_shue", buyShueHandler)
-	http.HandleFunc("/sell_shue", SellShueHandler)
+	// Загрузка данных за сегодня
+	loadDailyData(loc)
 
+	// WebSocket сервер
+	http.HandleFunc("/ws", handleConnections)
 	go func() {
 		log.Println("Server started on :8080")
-		if err := http.ListenAndServe(":8080", nil); err != nil {
-			log.Fatalf("HTTP server error: %v", err)
-		}
+		log.Fatal(http.ListenAndServe(":8080", nil))
 	}()
 
-	go dailyResetChecker(ctx)
+	// Проверка смены дня
+	go checkDayChange(loc)
 
-	<-ctx.Done()
+	select {}
 }
 
-func loadData() {
+func loadDailyData(loc *time.Location) {
+	dataMu.Lock()
+	defer dataMu.Unlock()
+
 	today := time.Now().In(loc).Format("2006-01-02")
+	currentDay = today
 	filename := fmt.Sprintf("data_%s.json", today)
 
-	file, err := os.ReadFile(filename)
-	if err != nil {
-		data = DailyData{
-			Date:    today,
-			BuyMap:  make(map[string]int), // Явная инициализация карты
-			SellMap: make(map[string]int), // Явная инициализация карты
+	// Инициализация данных
+	data.Prices = make(map[string]int)
+	data.BuyStats = make(map[string]int)
+	data.SellStats = make(map[string]int)
+	data.LastTrade = make(map[string]time.Time)
+
+	dailyData = DailyData{
+		Date:     today,
+		Prices:   make(map[string]int),
+		BuyStats: make(map[string]int),
+		SellStats: make(map[string]int),
+	}
+
+	// Загрузка из файла, если он существует и за сегодня
+	if file, err := os.ReadFile(filename); err == nil {
+		if err := json.Unmarshal(file, &dailyData); err == nil && dailyData.Date == today {
+			// Копируем цены из сохраненных данных
+			for item, price := range dailyData.Prices {
+				data.Prices[item] = price
+			}
+			// Копируем статистику
+			for item, count := range dailyData.BuyStats {
+				data.BuyStats[item] = count
+			}
+			for item, count := range dailyData.SellStats {
+				data.SellStats[item] = count
+			}
+			log.Println("Данные успешно загружены из файла")
 		}
+	}
+
+	// Устанавливаем базовые цены для новых предметов
+	for item, cfg := range itemsConfig {
+		if _, exists := data.Prices[item]; !exists {
+			data.Prices[item] = cfg.BasePrice
+			dailyData.Prices[item] = cfg.BasePrice
+		}
+	}
+
+	// Создаем/обновляем сообщение в Telegram
+	updateTelegramMessage()
+}
+
+func checkDayChange(loc *time.Location) {
+	for {
+		now := time.Now().In(loc)
+		nextDay := now.Add(24 * time.Hour)
+		nextDay = time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, loc)
+		time.Sleep(time.Until(nextDay))
+
+		// Новый день - сохраняем данные и создаем новое сообщение
+		dataMu.Lock()
+		saveDailyData()
+		loadDailyData(loc) // Перезагружаем данные для нового дня
+		dataMu.Unlock()
+	}
+}
+
+func saveDailyData() {
+	today := currentDay
+	if today == "" {
 		return
 	}
 
-	if err := json.Unmarshal(file, &data); err != nil {
-		log.Printf("Error decoding data file: %v", err)
-		data = DailyData{
-			Date:    today,
-			BuyMap:  make(map[string]int), // Явная инициализация карты
-			SellMap: make(map[string]int), // Явная инициализация карты
-		}
-	}
-
-	// Дополнительная проверка на nil мапы после загрузки
-	if data.BuyMap == nil {
-		data.BuyMap = make(map[string]int)
-	}
-	if data.SellMap == nil {
-		data.SellMap = make(map[string]int)
-	}
-}
-
-func saveData() {
-	today := time.Now().In(loc).Format("2006-01-02")
 	filename := fmt.Sprintf("data_%s.json", today)
+	dailyData.Prices = data.Prices
+	dailyData.BuyStats = data.BuyStats
+	dailyData.SellStats = data.SellStats
 
-	file, err := json.MarshalIndent(data, "", "  ")
+	file, err := json.MarshalIndent(dailyData, "", "  ")
 	if err != nil {
-		log.Printf("Error encoding data: %v", err)
+		log.Printf("Ошибка сохранения данных: %v", err)
 		return
 	}
 
 	if err := os.WriteFile(filename, file, 0644); err != nil {
-		log.Printf("Error saving data: %v", err)
+		log.Printf("Ошибка записи файла: %v", err)
 	}
 }
 
-func initTelegramMessage(ctx context.Context) {
-	if data.MessageID == 0 {
-		msgText := generateMessageText()
-		msg, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: chatID,
-			Text:   msgText,
-		})
-		if err != nil {
-			log.Printf("Error sending message: %v", err)
-			return
-		}
-		data.MessageID = msg.ID
-		data.LastText = msgText
-		saveData()
-	} else {
-		updateTelegramMessage(ctx)
-	}
+func handleConnections(w http.ResponseWriter, r *http.Request) {
+    ws, err := upgrader.Upgrade(w, r, nil)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer ws.Close()
+
+    clientsMu.Lock()
+    clients[ws] = true
+    clientsMu.Unlock()
+
+    // Отправляем текущие цены при подключении
+    dataMu.Lock()
+    ws.WriteJSON(data.Prices)
+    dataMu.Unlock()
+
+    for {
+        var msg struct {
+            Action string
+            Type   string
+        }
+        if err := ws.ReadJSON(&msg); err != nil {
+            clientsMu.Lock()
+            delete(clients, ws)
+            clientsMu.Unlock()
+            break
+        }
+
+        dataMu.Lock()
+        switch msg.Action {
+        case "buy":
+            data.BuyStats[msg.Type]++
+            data.LastTrade[msg.Type] = time.Now()
+            adjustPrice(msg.Type)
+        case "sell":
+            data.SellStats[msg.Type]++
+            data.LastTrade[msg.Type] = time.Now()
+            adjustPrice(msg.Type)
+        case "info":
+            ws.WriteJSON(data.Prices)
+        }
+        saveDailyData()
+        dataMu.Unlock()
+    }
 }
 
-func buyShueHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
+func adjustPrice(item string) {
+    cfg, ok := itemsConfig[item]
+    if !ok {
+        return
+    }
 
-	var request struct {
-		Type string `json:"type"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
+    now := time.Now()
+    buyCount := 0
+    sellCount := 0
 
-	dataMutex.Lock()
-	defer dataMutex.Unlock()
+    // Считаем сделки за установленный период
+    for t, action := range data.LastTrade {
+        if now.Sub(action) > cfg.AnalysisTime {
+            continue
+        }
+        if t == item {
+            buyCount += data.BuyStats[t]
+            sellCount += data.SellStats[t]
+        }
+    }
 
-	// Проверка инициализации карты перед использованием
-	if data.BuyMap == nil {
-		data.BuyMap = make(map[string]int)
-	}
+    // Изменяем цену по правилам
+    newPrice := data.Prices[item]
+    if buyCount > sellCount+cfg.NormalSales {
+        newPrice -= cfg.PriceStep
+    } else if buyCount < cfg.NormalSales {
+        newPrice += cfg.PriceStep
+    }
 
-	data.BuyMap[request.Type]++
+    // Применяем изменения
+    if newPrice != data.Prices[item] {
+        data.Prices[item] = newPrice
+        dailyData.Prices[item] = newPrice
 
-	saveData()
-	updateTelegramMessage(context.Background())
+        // Рассылаем обновленные цены
+        clientsMu.Lock()
+        for client := range clients {
+            client.WriteJSON(data.Prices)
+        }
+        clientsMu.Unlock()
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(data.BuyMap)
-}
-
-func SellShueHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var request struct {
-		Type string `json:"type"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	dataMutex.Lock()
-	defer dataMutex.Unlock()
-
-	// Проверка инициализации карты перед использованием
-	if data.SellMap == nil {
-		data.SellMap = make(map[string]int)
-	}
-
-	data.SellMap[request.Type]++
-
-	saveData()
-	updateTelegramMessage(context.Background())
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(data.SellMap)
-}
-
-func updateTelegramMessage(ctx context.Context) {
-	newText := generateMessageText()
-	if newText == data.LastText {
-		return
-	}
-
-	_, err := tgBot.EditMessageText(ctx, &bot.EditMessageTextParams{
-		ChatID:    chatID,
-		MessageID: data.MessageID,
-		Text:      newText,
-	})
-	if err != nil {
-		log.Printf("Error updating Telegram message: %v", err)
-		return
-	}
-
-	data.LastText = newText
-	saveData()
-}
-
-func generateMessageText() string {
-	today := time.Now().In(loc).Format("2006-01-02")
-	currentTime := time.Now().In(loc).Format("15:04")
-	
-	msg := fmt.Sprintf("🗡 Статистика за %s:\n"+
-		today,)
-
-	// Обработка данных из мап
-	if len(data.BuyMap) > 0 || len(data.SellMap) > 0 {
-		msg += "\nДополнительные предметы:\n"
+        // Обновляем сообщение в Telegram
 		
-		// Собираем все уникальные ключи из обеих мап
-		allKeys := make([]string, 0)
-		for k := range data.BuyMap {
-			allKeys = append(allKeys, k)
-		}
-		for k := range data.SellMap {
-			if _, exists := data.BuyMap[k]; !exists {
-				allKeys = append(allKeys, k)
-			}
-		}
-		
-		// Сортируем ключи по алфавиту
-		sort.Strings(allKeys)
-		
-		// Выводим каждый предмет в формате "название: покупки/продажи"
-		for _, item := range allKeys {
-			buyCount := data.BuyMap[item]
-			sellCount := data.SellMap[item]
-			msg += fmt.Sprintf("%s: %d/%d\n", item, buyCount, sellCount)
-		}
-	}
-
-	// Добавляем время в конце
-	msg += fmt.Sprintf("\n%s", currentTime)
-
-	return msg
+        updateTelegramMessage()
+    }
 }
 
-func dailyResetChecker(ctx context.Context) {
-	for {
-		now := time.Now().In(loc)
-		nextMidnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, loc)
-		duration := nextMidnight.Sub(now)
 
-		select {
-		case <-time.After(duration):
-			dataMutex.Lock()
-			data = DailyData{
-				Date:    time.Now().In(loc).Format("2006-01-02"),
-				BuyMap:  make(map[string]int),
-				SellMap: make(map[string]int),
-			}
-			dataMutex.Unlock()
+func updateTelegramMessage() {
+    // Получаем текущее время
+    currentTime := time.Now().Format("2006-01-02 15:04:05")
 
-			initTelegramMessage(ctx)
+    // Формируем текст сообщения с текущим временем
+    msgText := fmt.Sprintf("📊 Статистика за %s\nПоследнее обновление: %s\n\n", dailyData.Date, currentTime)
 
-		case <-ctx.Done():
-			return
-		}
-	}
+    for item := range itemsConfig {
+        msgText += fmt.Sprintf(
+            "🔹 %s: %d ₽\n🛒 Куплено: %d\n💰 Продано: %d\n\n",
+            item,
+            data.Prices[item],
+            data.BuyStats[item],
+            data.SellStats[item],
+        )
+    }
+
+    // Создаем новое сообщение или редактируем существующее
+    ctx := context.Background()
+    if dailyData.MessageID == 0 {
+        msg, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: chatID,
+            Text:   msgText,
+        })
+        if err == nil {
+            dailyData.MessageID = msg.ID
+            saveDailyData()
+        }
+    } else {
+        _, err := tgBot.EditMessageText(ctx, &bot.EditMessageTextParams{
+            ChatID:    chatID,
+            MessageID: dailyData.MessageID,
+            Text:      msgText,
+        })
+        if err != nil {
+            log.Printf("Ошибка обновления сообщения: %v", err)
+        }
+    }
 }
