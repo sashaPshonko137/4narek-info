@@ -4,8 +4,8 @@ After=network.target
 
 [Service]
 User=ubuntu
-WorkingDirectory=/home/ubuntu/yourproject
-ExecStart=/usr/bin/go run /home/ubuntu/yourproject/main.go
+WorkingDirectory=/home/ubuntu/4narek-info
+ExecStart=/usr/bin/go run /home/ubuntu/4narek-info/main.go
 Restart=always
 
 [Install]
