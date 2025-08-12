@@ -92,7 +92,7 @@ var (
 			BasePrice:    4500007,
 			NormalSales:  3,
 			PriceStep:    100000,
-			AnalysisTime: 15 * time.Minute,
+			AnalysisTime: 20 * time.Minute,
 			MinPrice: 500007,
 		},
 		"elytra-unbreak": {
