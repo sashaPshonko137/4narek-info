@@ -366,7 +366,7 @@ func adjustPrice(item string) {
         }
     }
 
-	if swordTimes[item].Add(itemsConfig[item].AnalysisTime).Before(time.Now()) {
+	if swordTimes[item].Add(itemsConfig[item].AnalysisTime).After(time.Now()) {
     	if buyCount < itemsConfig[item].NormalSales {
 			return
 		}
