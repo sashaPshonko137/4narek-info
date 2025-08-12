@@ -267,6 +267,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
         }
 
         dataMu.Lock()
+		log.Print(msg, " msg")
         switch msg.Action {
         case "buy":
             data.BuyStats[msg.Type]++
