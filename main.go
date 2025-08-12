@@ -33,6 +33,7 @@ type ItemConfig struct {
 	PriceStep    int
 	AnalysisTime time.Duration
 	MinPrice     int
+	MaxPrice     int
 }
 
 type DailyData struct {
@@ -374,6 +375,9 @@ func adjustPrice(item string) {
     } else if buyCount < cfg.NormalSales {
         newPrice += cfg.PriceStep
     }
+	if newPrice >= cfg.MaxPrice && buyCount < cfg.NormalSales {
+		newPrice = cfg.BasePrice
+	}
 
     // Применяем изменения
     if newPrice != data.Prices[item] {
@@ -383,7 +387,11 @@ func adjustPrice(item string) {
         // Рассылаем обновленные цены
         clientsMu.Lock()
         for client := range clients {
-            client.WriteJSON(data.Prices)
+            err := client.WriteJSON(data.Prices)
+
+			if err != nil {
+				log.Print(err, "Отправка цен клиенту")
+			}
         }
         clientsMu.Unlock()
 
