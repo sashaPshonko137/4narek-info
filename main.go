@@ -257,9 +257,8 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
             Type   string
         }
         if err := ws.ReadJSON(&msg); err != nil {
-            clientsMu.Lock()
-            delete(clients, ws)
             clientsMu.Unlock()
+			fmt.Print(msg, err)
             break
         }
 
