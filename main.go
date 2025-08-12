@@ -45,49 +45,49 @@ type DailyData struct {
 var (
 	itemsConfig = map[string]ItemConfig{
 		"sword5": {
-			BasePrice:    2000000,
+			BasePrice:    2000001,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 5 * time.Minute,
 		},
 		"sword6": {
-			BasePrice:    2600000,
+			BasePrice:    2600002,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 12 * time.Minute,
 		},
 		"sword7": {
-			BasePrice:    3200000,
+			BasePrice:    3200003,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 		},
 		"pochti-megasword": {
-			BasePrice:    3900000,
+			BasePrice:    3900004,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 23 * time.Minute,
 		},
 		"megasword": {
-			BasePrice:    5200000,
+			BasePrice:    5200005,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 20 * time.Minute,
 		},
 		"elytra": {
-			BasePrice:    1200000,
+			BasePrice:    1200006,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 7 * time.Minute,
 		},
 		"elytra-mend": {
-			BasePrice:    4500000,
+			BasePrice:    4500007,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 15 * time.Minute,
 		},
 		"elytra-unbreak": {
-			BasePrice:    1700000,
+			BasePrice:    1700008,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 9 * time.Minute,
