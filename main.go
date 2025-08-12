@@ -57,7 +57,7 @@ var (
 			BasePrice:    2600002,
 			NormalSales:  3,
 			PriceStep:    100000,
-			AnalysisTime: 16 * time.Minute,
+			AnalysisTime: 8 * time.Minute,
 			MinPrice: 600002,
 		},
 		"sword7": {
