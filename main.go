@@ -357,7 +357,7 @@ func adjustPrice(item string) {
 
     // Считаем сделки за установленный период
     for t, action := range data.LastTrade {
-        if now.Sub(action) > cfg.AnalysisTime {
+        if now.Sub(action) < cfg.AnalysisTime {
             continue
         }
         if t == item {
