@@ -121,13 +121,13 @@ var (
 func main() {
 	loc, err := time.LoadLocation(timezone)
 	if err != nil {
-		log.Fatalf("Error loading location: %v", err)
+		log.Printf("Error loading location: %v", err)
 	}
 
 	// Инициализация бота Telegram
 	b, err := bot.New(token)
 	if err != nil {
-		log.Fatalf("Error creating bot: %v", err)
+		log.Printf("Error creating bot: %v", err)
 	}
 	tgBot = b
 
@@ -138,7 +138,7 @@ func main() {
 	http.HandleFunc("/ws", handleConnections)
 	go func() {
 		log.Println("Server started on :8080")
-		log.Fatal(http.ListenAndServe(":8080", nil))
+		log.Print(http.ListenAndServe(":8080", nil))
 	}()
 
 	// Проверка смены дня
@@ -232,13 +232,15 @@ func saveDailyData() {
 
 	if err := os.WriteFile(filename, file, 0644); err != nil {
 		log.Printf("Ошибка записи файла: %v", err)
+		return
 	}
 }
 
 func handleConnections(w http.ResponseWriter, r *http.Request) {
     ws, err := upgrader.Upgrade(w, r, nil)
     if err != nil {
-        log.Fatal(err)
+        log.Print(err, " upgrade error")
+		return
     }
     defer ws.Close()
 
@@ -257,8 +259,10 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
             Type   string
         }
         if err := ws.ReadJSON(&msg); err != nil {
+            clientsMu.Lock()
+            delete(clients, ws)
             clientsMu.Unlock()
-			fmt.Print(msg, err)
+			log.Print(err, " readJson error")
             break
         }
 
