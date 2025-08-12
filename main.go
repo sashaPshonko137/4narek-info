@@ -78,7 +78,7 @@ var (
 			BasePrice:    5200005,
 			NormalSales:  3,
 			PriceStep:    100000,
-			AnalysisTime: 20 * time.Minute,
+			AnalysisTime: 23 * time.Minute,
 			MinPrice: 1200005,
 		},
 		"elytra": {
