@@ -47,35 +47,35 @@ var (
 	
 	itemsConfig = map[string]ItemConfig{
 		"sword5": {
-			BasePrice:    2000001,
+			BasePrice:    2100001,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 5 * time.Minute,
 			MinPrice: 500001,
 		},
 		"sword6": {
-			BasePrice:    2600002,
+			BasePrice:    800002,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 8 * time.Minute,
 			MinPrice: 600002,
 		},
 		"sword7": {
-			BasePrice:    3200003,
+			BasePrice:    4100003,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice: 700003,
 		},
 		"pochti-megasword": {
-			BasePrice:    3900004,
+			BasePrice:    1000004,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 23 * time.Minute,
 			MinPrice: 100004,
 		},
 		"megasword": {
-			BasePrice:    5200005,
+			BasePrice:    7300005,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 23 * time.Minute,
