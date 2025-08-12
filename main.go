@@ -254,20 +254,31 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
     dataMu.Unlock()
 
     for {
-        var msg struct {
-            Action string
-            Type   string
-        }
-        if err := ws.ReadJSON(&msg); err != nil {
-            clientsMu.Lock()
-            delete(clients, ws)
-            clientsMu.Unlock()
-			log.Print(err, " readJson error")
-            break
-        }
+    	var msg struct {
+    		Action string
+    		Type   string
+		}
 
-        dataMu.Lock()
-		log.Print(msg, " msg")
+		// Сначала читаем сырые данные
+		var rawData json.RawMessage
+		if err := ws.ReadJSON(&rawData); err != nil {
+		    clientsMu.Lock()
+		    delete(clients, ws)
+ 		  	 clientsMu.Unlock()
+ 		  	 log.Print(err, " readJson error")
+ 		   break
+		}
+
+		// Логируем сырой JSON
+		log.Printf("Received JSON: %s", string(rawData))
+
+		// Затем парсим в структуру
+		if err := json.Unmarshal(rawData, &msg); err != nil {
+ 		   	log.Printf("Failed to unmarshal JSON: %v, raw data: %s", err, string(rawData))
+  		  	break
+		}
+
+		dataMu.Lock()
         switch msg.Action {
         case "buy":
             data.BuyStats[msg.Type]++
