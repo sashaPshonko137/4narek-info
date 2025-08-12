@@ -32,6 +32,7 @@ type ItemConfig struct {
 	NormalSales  int
 	PriceStep    int
 	AnalysisTime time.Duration
+	MinPrice     int
 }
 
 type DailyData struct {
@@ -43,54 +44,63 @@ type DailyData struct {
 }
 
 var (
+	
 	itemsConfig = map[string]ItemConfig{
 		"sword5": {
 			BasePrice:    2000001,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 5 * time.Minute,
+			MinPrice: 500001,
 		},
 		"sword6": {
 			BasePrice:    2600002,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 12 * time.Minute,
+			MinPrice: 600002,
 		},
 		"sword7": {
 			BasePrice:    3200003,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
+			MinPrice: 700003,
 		},
 		"pochti-megasword": {
 			BasePrice:    3900004,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 23 * time.Minute,
+			MinPrice: 100004,
 		},
 		"megasword": {
 			BasePrice:    5200005,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 20 * time.Minute,
+			MinPrice: 1200005,
 		},
 		"elytra": {
 			BasePrice:    1200006,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 7 * time.Minute,
+			MinPrice: 2000006,
 		},
 		"elytra-mend": {
 			BasePrice:    4500007,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 15 * time.Minute,
+			MinPrice: 500007,
 		},
 		"elytra-unbreak": {
 			BasePrice:    1700008,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 9 * time.Minute,
+			MinPrice: 300008,
 		},
 
 	}
@@ -115,6 +125,9 @@ var (
 		"sword7": time.Now(),
 		"pochti-megasword": time.Now(),
 		"megasword": time.Now(),
+		"elytra": time.Now(),
+		"elytra-mend": time.Now(),
+		"elytra-unbreak": time.Now(),
 	}
 )
 
@@ -143,8 +156,16 @@ func main() {
 
 	// Проверка смены дня
 	go checkDayChange(loc)
+	//time.Sleep(1 * time.Minute)
+	go fixPrice()
 
 	select {}
+}
+
+func getConnectedClientsCount() int {
+    clientsMu.Lock()
+    defer clientsMu.Unlock()
+    return len(clients)
 }
 
 func loadDailyData(loc *time.Location) {
@@ -296,6 +317,25 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
     }
 }
 
+func fixPrice() {
+	for {
+		if getConnectedClientsCount() == 0 {
+			log.Println("Нет подлключенных клиентов")
+		} else {
+			log.Println("fixing all prices ", time.Now().Format("15:04:05"))
+			adjustPrice("sword5")
+			adjustPrice("sword6")
+			adjustPrice("sword7")
+			adjustPrice("pochti-megasword")
+			adjustPrice("elytra")
+			adjustPrice("elytra-mend")
+			adjustPrice("elytra-unbreak")
+			adjustPrice("megasword")
+		}
+        time.Sleep(1 * time.Minute)
+    }
+}
+
 func adjustPrice(item string) {
     cfg, ok := itemsConfig[item]
     if !ok {
@@ -328,6 +368,9 @@ func adjustPrice(item string) {
     newPrice := data.Prices[item]
     if buyCount > sellCount+cfg.NormalSales {
         newPrice -= cfg.PriceStep
+		if newPrice < cfg.MinPrice {
+			newPrice = cfg.MinPrice
+		}
     } else if buyCount < cfg.NormalSales {
         newPrice += cfg.PriceStep
     }
