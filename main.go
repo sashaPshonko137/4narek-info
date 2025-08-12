@@ -53,6 +53,7 @@ var (
 			PriceStep:    100000,
 			AnalysisTime: 5 * time.Minute,
 			MinPrice: 500001,
+			MaxPrice: 5000001,
 		},
 		"sword6": {
 			BasePrice:    800002,
@@ -60,6 +61,7 @@ var (
 			PriceStep:    100000,
 			AnalysisTime: 8 * time.Minute,
 			MinPrice: 600002,
+			MaxPrice: 6000002,
 		},
 		"sword7": {
 			BasePrice:    4100003,
@@ -67,6 +69,7 @@ var (
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice: 700003,
+			MaxPrice: 7000003,
 		},
 		"pochti-megasword": {
 			BasePrice:    1000004,
@@ -74,6 +77,7 @@ var (
 			PriceStep:    100000,
 			AnalysisTime: 23 * time.Minute,
 			MinPrice: 100004,
+			MaxPrice: 8000004,
 		},
 		"megasword": {
 			BasePrice:    7300005,
@@ -81,6 +85,7 @@ var (
 			PriceStep:    100000,
 			AnalysisTime: 23 * time.Minute,
 			MinPrice: 1200005,
+			MaxPrice: 10000005,
 		},
 		"elytra": {
 			BasePrice:    1200006,
@@ -88,6 +93,7 @@ var (
 			PriceStep:    100000,
 			AnalysisTime: 7 * time.Minute,
 			MinPrice: 2000006,
+			MaxPrice: 30000006,
 		},
 		"elytra-mend": {
 			BasePrice:    4500007,
@@ -95,6 +101,7 @@ var (
 			PriceStep:    100000,
 			AnalysisTime: 20 * time.Minute,
 			MinPrice: 500007,
+			MaxPrice: 8000007,
 		},
 		"elytra-unbreak": {
 			BasePrice:    1700008,
@@ -102,6 +109,7 @@ var (
 			PriceStep:    100000,
 			AnalysisTime: 9 * time.Minute,
 			MinPrice: 300008,
+			MaxPrice: 5000008,
 		},
 
 	}
