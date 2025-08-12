@@ -56,7 +56,7 @@ var (
 			MaxPrice: 5000001,
 		},
 		"sword6": {
-			BasePrice:    800002,
+			BasePrice:    2500002,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 8 * time.Minute,
@@ -64,7 +64,7 @@ var (
 			MaxPrice: 6000002,
 		},
 		"sword7": {
-			BasePrice:    4100003,
+			BasePrice:    3500003,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -72,7 +72,7 @@ var (
 			MaxPrice: 7000003,
 		},
 		"pochti-megasword": {
-			BasePrice:    1000004,
+			BasePrice:    3500004,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 23 * time.Minute,
@@ -80,7 +80,7 @@ var (
 			MaxPrice: 8000004,
 		},
 		"megasword": {
-			BasePrice:    7300005,
+			BasePrice:    5000005,
 			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 23 * time.Minute,
