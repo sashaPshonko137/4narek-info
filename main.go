@@ -188,10 +188,11 @@ func loadDailyData(loc *time.Location) {
 	filename := fmt.Sprintf("data_%s.json", today)
 
 	// Инициализация данных
-	data.Prices = make(map[string]int)
-	data.BuyStats = make(map[string]int)
-	data.SellStats = make(map[string]int)
-	data.LastTrade = make(map[string]time.Time)
+data.Prices = make(map[string]int)
+data.BuyStats = make(map[string]int)
+data.SellStats = make(map[string]int)
+data.LastTrade = make(map[string]time.Time)
+data.TradeHistory = make(map[string][]TradeLog)
 
 	dailyData = DailyData{
 		Date:     today,
