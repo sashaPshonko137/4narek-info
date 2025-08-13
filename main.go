@@ -320,15 +320,25 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	dataMu.Unlock()
 
 	for {
+		// Читаем сырые данные
+		_, rawMsg, err := ws.ReadMessage()
+		if err != nil {
+			log.Printf("read error: %v", err)
+			break
+		}
+
+		// Логируем входящий JSON
+		log.Printf("[WS incoming] %s", string(rawMsg))
+
+		// Парсим JSON в структуру
 		var msg struct {
 			Action string `json:"action"` // buy, sell, info, presence
 			Type   string `json:"type"`   // тип предмета
 			Count  int    `json:"count"`  // если presence
 		}
-
-		if err := ws.ReadJSON(&msg); err != nil {
-			log.Printf("read error: %v", err)
-			break
+		if err := json.Unmarshal(rawMsg, &msg); err != nil {
+			log.Printf("json unmarshal error: %v", err)
+			continue
 		}
 
 		dataMu.Lock()
@@ -358,6 +368,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		dataMu.Unlock()
 	}
 }
+
 
 
 
