@@ -459,7 +459,9 @@ func adjustPrice(item string) {
 	limit, exists := itemLimit[cfg.Type]
 	if exists && itemTypeCount > limit {
 		newPrice -= cfg.PriceStep
-
+		if newPrice < cfg.MinPrice {
+			newPrice = cfg.MinPrice
+		}
 		log.Printf("Цена %s понижена: %d %s у ботов превышает лимит %d", item, itemTypeCount, cfg.Type, limit)
 	} else {
 		newPrice += cfg.PriceStep
