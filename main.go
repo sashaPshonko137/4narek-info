@@ -339,7 +339,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Логируем входящий JSON
-		// log.Printf("[WS incoming] %s", string(rawMsg))
+		log.Printf("[WS incoming] %s", string(rawMsg))
 
 		// Парсим JSON в структуру
 var msg struct {
