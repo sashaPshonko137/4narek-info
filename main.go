@@ -48,14 +48,14 @@ type ItemConfig struct {
 }
 
 var itemStockNorms = map[string]int{
-    "sword5":  10,
-    "sword6":  8,
-    "sword7":  6,
-    "pochti-megasword": 4,
-    "megasword": 2,
-    "elytra":  8,
+    "sword5":  72,
+    "sword6":  63,
+    "sword7":  65,
+    "pochti-megasword": 50,
+    "megasword": 50,
+    "elytra":  12,
     "elytra-mend": 4,
-    "elytra-unbreak": 5,
+    "elytra-unbreak": 9,
 }
 
 type DailyData struct {
