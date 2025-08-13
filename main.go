@@ -80,9 +80,9 @@ var (
 		},
 		"sword6": {
 			BasePrice:    2500002,
-			NormalSales:  5,
+			NormalSales:  3,
 			PriceStep:    100000,
-			AnalysisTime: 15 * time.Minute,
+			AnalysisTime: 10 * time.Minute,
 			MinPrice: 600002,
 			MaxPrice: 6000002,
 			Type: "netherite_sword",
@@ -125,9 +125,9 @@ var (
 		},
 		"elytra-mend": {
 			BasePrice:    4500007,
-			NormalSales:  3,
+			NormalSales:  1,
 			PriceStep:    100000,
-			AnalysisTime: 20 * time.Minute,
+			AnalysisTime: 10 * time.Minute,
 			MinPrice: 500007,
 			MaxPrice: 8000007,
 			Type: "elytra",
