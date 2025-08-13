@@ -429,16 +429,28 @@ type TradeLog struct {
 
 var swordTimesMu sync.Mutex
 
-func countRecentSales(item string, interval time.Duration) int {
-	now := time.Now()
+func countRecentSales(item string, since time.Time) int {
 	count := 0
 	for _, trade := range data.TradeHistory[item] {
-		if trade.Type == "sell" && now.Sub(trade.Time) <= interval {
+		if trade.Type == "sell" && trade.Time.After(since) {
 			count++
 		}
 	}
 	return count
 }
+
+func getItemCount(item string) int {
+	clientItemsMu.Lock()
+	defer clientItemsMu.Unlock()
+
+	count := 0
+	for _, items := range clientItems {
+		count += items[item]
+	}
+	return count
+}
+
+var lastPriceUpdate = make(map[string]time.Time)
 
 func adjustPrice(item string) {
 	cfg, ok := itemsConfig[item]
@@ -447,42 +459,48 @@ func adjustPrice(item string) {
 	}
 
 	now := time.Now()
-	sales := countRecentSales(item, cfg.AnalysisTime)
-	if sales >= cfg.NormalSales {
-		// Продаётся нормально — ничего не меняем
-		return
-	}
 
-	// Считаем количество предметов этого типа у ботов
-	totalStock := getItemTypeCount(cfg.Type)
-	stockNorm := itemLimit[cfg.Type] // общий лимит на тип (сохраняем)
-	_, hasNorm := itemStockNorms[item] // лимит на конкретный предмет
-
-	// Проверка времени последнего обновления
+	// Проверка интервала: не менять цену чаще, чем cfg.AnalysisTime
 	swordTimesMu.Lock()
-	if now.Sub(swordTimes[item]) < cfg.AnalysisTime {
+	lastUpdate, updatedBefore := swordTimes[item]
+	if updatedBefore && now.Sub(lastUpdate) < cfg.AnalysisTime {
 		swordTimesMu.Unlock()
 		return
 	}
 	swordTimes[item] = now
 	swordTimesMu.Unlock()
 
+	// Если раньше не обновляли — считаем от AnalysisTime назад
+	if !updatedBefore {
+		lastUpdate = now.Add(-cfg.AnalysisTime)
+	}
+
+	sales := countRecentSales(item, lastUpdate)
+	if sales >= cfg.NormalSales {
+		// Продаётся нормально — ничего не меняем
+		return
+	}
+
 	newPrice := data.Prices[item]
 
-	if totalStock > stockNorm {
-		// Инвентари переполнены — понижаем цену
-		newPrice -= cfg.PriceStep
-		if newPrice < cfg.MinPrice {
-			newPrice = cfg.MinPrice
-		}
-	} else if hasNorm && totalStock < stockNorm {
-		// В наличии мало, но продаётся плохо — возможно, виноват другой предмет
+	// Проверяем лимит на конкретный предмет
+	stockNorm, hasNorm := itemStockNorms[item]
+	totalItemStock := getItemCount(item)
+
+	if hasNorm && totalItemStock < stockNorm {
+		// Возможно, виноват другой предмет этого же типа
 		for otherItem, otherCfg := range itemsConfig {
 			if otherItem == item || otherCfg.Type != cfg.Type {
 				continue
 			}
 
-			otherSales := countRecentSales(otherItem, otherCfg.AnalysisTime)
+			// Сравниваем с момента последнего обновления паразита
+			otherLastUpdate, ok := swordTimes[otherItem]
+			if !ok {
+				otherLastUpdate = now.Add(-otherCfg.AnalysisTime)
+			}
+
+			otherSales := countRecentSales(otherItem, otherLastUpdate)
 			if otherSales >= otherCfg.NormalSales {
 				continue
 			}
@@ -494,10 +512,16 @@ func adjustPrice(item string) {
 			}
 		}
 
-		// Нет паразита — повышаем цену (вдруг слишком дёшево?)
+		// Нет паразита — повышаем цену
 		newPrice += cfg.PriceStep
 		if newPrice > cfg.MaxPrice {
 			newPrice = cfg.MaxPrice
+		}
+	} else {
+		// Просто понижаем цену (в наличии много или нет норм)
+		newPrice -= cfg.PriceStep
+		if newPrice < cfg.MinPrice {
+			newPrice = cfg.MinPrice
 		}
 	}
 
@@ -505,6 +529,8 @@ func adjustPrice(item string) {
 	if newPrice != data.Prices[item] {
 		data.Prices[item] = newPrice
 		dailyData.Prices[item] = newPrice
+
+		lastPriceUpdate[item] = now // для точного учёта продаж после изменения
 
 		// Рассылаем клиентам
 		clientsMu.Lock()
@@ -517,6 +543,9 @@ func adjustPrice(item string) {
 		updateTelegramMessage()
 	}
 }
+
+
+
 
 
 
