@@ -328,7 +328,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Логируем входящий JSON
-		log.Printf("[WS incoming] %s", string(rawMsg))
+		// log.Printf("[WS incoming] %s", string(rawMsg))
 
 		// Парсим JSON в структуру
 		var msg struct {
@@ -458,12 +458,11 @@ func adjustPrice(item string) {
 	itemTypeCount := getItemTypeCount(cfg.Type)
 	limit, exists := itemLimit[cfg.Type]
 	if exists && itemTypeCount > limit {
-		log.Printf("Цена %s не повышена: %d %s у клиентов превышает лимит %d", item, itemTypeCount, cfg.Type, limit)
+		newPrice -= cfg.PriceStep
+
+		log.Printf("Цена %s понижена: %d %s у ботов превышает лимит %d", item, itemTypeCount, cfg.Type, limit)
 	} else {
 		newPrice += cfg.PriceStep
-		if newPrice > cfg.MaxPrice {
-			newPrice = cfg.BasePrice // сброс
-		}
 	}
 }
 
