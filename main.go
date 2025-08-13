@@ -47,6 +47,17 @@ type ItemConfig struct {
 	Type         string
 }
 
+var itemStockNorms = map[string]int{
+    "sword5":  10,
+    "sword6":  8,
+    "sword7":  6,
+    "pochti-megasword": 4,
+    "megasword": 2,
+    "elytra":  8,
+    "elytra-mend": 4,
+    "elytra-unbreak": 5,
+}
+
 type DailyData struct {
 	Date     string         `json:"date"`
 	Prices   map[string]int `json:"prices"`
@@ -331,11 +342,12 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		// log.Printf("[WS incoming] %s", string(rawMsg))
 
 		// Парсим JSON в структуру
-		var msg struct {
-			Action string `json:"action"` // buy, sell, info, presence
-			Type   string `json:"type"`   // тип предмета
-			Count  int    `json:"count"`  // если presence
-		}
+var msg struct {
+	Action string            `json:"action"`
+	Type   string            `json:"type"`   // для buy/sell
+	Items  map[string]int    `json:"items"`  // для presence
+}
+
 		if err := json.Unmarshal(rawMsg, &msg); err != nil {
 			log.Printf("json unmarshal error: %v", err)
 			continue
@@ -344,10 +356,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		dataMu.Lock()
 		switch msg.Action {
 		case "buy":
-			data.BuyStats[msg.Type]++
-			data.LastTrade[msg.Type] = time.Now()
-			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "buy"})
-			adjustPrice(msg.Type)
+	
 		case "sell":
 			data.SellStats[msg.Type]++
 			data.LastTrade[msg.Type] = time.Now()
@@ -355,14 +364,16 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			adjustPrice(msg.Type)
 		case "info":
 			ws.WriteJSON(data.Prices)
-		case "presence":
-			clientItemsMu.Lock()
-			if msg.Count <= 0 {
-				delete(clientItems[ws], msg.Type)
-			} else {
-				clientItems[ws][msg.Type] = msg.Count
-			}
-			clientItemsMu.Unlock()
+case "presence":
+	clientItemsMu.Lock()
+	clientItems[ws] = make(map[string]int)
+	for item, count := range msg.Items {
+		if count > 0 {
+			clientItems[ws][item] = count
+		}
+	}
+	clientItemsMu.Unlock()
+
 		}
 		saveDailyData()
 		dataMu.Unlock()
@@ -378,12 +389,19 @@ func getItemTypeCount(itemType string) int {
 
 	count := 0
 	for _, items := range clientItems {
-		if c, ok := items[itemType]; ok {
-			count += c
+		for itemID, itemCount := range items {
+			cfg, exists := itemsConfig[itemID]
+			if !exists {
+				continue
+			}
+			if cfg.Type == itemType {
+				count += itemCount
+			}
 		}
 	}
 	return count
 }
+
 
 func fixPrice() {
 	for {
@@ -411,6 +429,17 @@ type TradeLog struct {
 
 var swordTimesMu sync.Mutex
 
+func countRecentSales(item string, interval time.Duration) int {
+	now := time.Now()
+	count := 0
+	for _, trade := range data.TradeHistory[item] {
+		if trade.Type == "sell" && now.Sub(trade.Time) <= interval {
+			count++
+		}
+	}
+	return count
+}
+
 func adjustPrice(item string) {
 	cfg, ok := itemsConfig[item]
 	if !ok {
@@ -418,73 +447,77 @@ func adjustPrice(item string) {
 	}
 
 	now := time.Now()
-
-	// Подсчёт за последние X минут
-	var buyCount, sellCount int
-	entries := data.TradeHistory[item]
-	filtered := []TradeLog{}
-	for _, trade := range entries {
-		if now.Sub(trade.Time) <= cfg.AnalysisTime {
-			filtered = append(filtered, trade)
-			if trade.Type == "buy" {
-				buyCount++
-			} else if trade.Type == "sell" {
-				sellCount++
-			}
-		}
+	sales := countRecentSales(item, cfg.AnalysisTime)
+	if sales >= cfg.NormalSales {
+		// Продаётся нормально — ничего не меняем
+		return
 	}
-	data.TradeHistory[item] = filtered // оставляем только свежие записи
 
-	// Блокировка работы с временем
+	// Считаем количество предметов этого типа у ботов
+	totalStock := getItemTypeCount(cfg.Type)
+	stockNorm := itemLimit[cfg.Type] // общий лимит на тип (сохраняем)
+	_, hasNorm := itemStockNorms[item] // лимит на конкретный предмет
+
+	// Проверка времени последнего обновления
 	swordTimesMu.Lock()
-	timePassed := now.Sub(swordTimes[item]) >= cfg.AnalysisTime
-	enoughSales := buyCount >= cfg.NormalSales
-	if !timePassed && !enoughSales {
+	if now.Sub(swordTimes[item]) < cfg.AnalysisTime {
 		swordTimesMu.Unlock()
 		return
 	}
 	swordTimes[item] = now
 	swordTimesMu.Unlock()
 
-	// Ценообразование
 	newPrice := data.Prices[item]
 
-	if buyCount > sellCount+cfg.NormalSales {
+	if totalStock > stockNorm {
+		// Инвентари переполнены — понижаем цену
 		newPrice -= cfg.PriceStep
 		if newPrice < cfg.MinPrice {
 			newPrice = cfg.MinPrice
 		}
-} else if buyCount < cfg.NormalSales {
-	itemTypeCount := getItemTypeCount(cfg.Type)
-	limit, exists := itemLimit[cfg.Type]
-	if exists && itemTypeCount > limit {
-		newPrice -= cfg.PriceStep
-		if newPrice < cfg.MinPrice {
-			newPrice = cfg.MinPrice
-		}
-		log.Printf("Цена %s понижена: %d %s у ботов превышает лимит %d", item, itemTypeCount, cfg.Type, limit)
-	} else {
-		newPrice += cfg.PriceStep
-	}
-}
+	} else if hasNorm && totalStock < stockNorm {
+		// В наличии мало, но продаётся плохо — возможно, виноват другой предмет
+		for otherItem, otherCfg := range itemsConfig {
+			if otherItem == item || otherCfg.Type != cfg.Type {
+				continue
+			}
 
+			otherSales := countRecentSales(otherItem, otherCfg.AnalysisTime)
+			if otherSales >= otherCfg.NormalSales {
+				continue
+			}
+
+			otherPrice := data.Prices[otherItem]
+			if otherPrice > newPrice {
+				// Нашли паразита — ничего не делаем
+				return
+			}
+		}
+
+		// Нет паразита — повышаем цену (вдруг слишком дёшево?)
+		newPrice += cfg.PriceStep
+		if newPrice > cfg.MaxPrice {
+			newPrice = cfg.MaxPrice
+		}
+	}
+
+	// Обновляем цену, если она изменилась
 	if newPrice != data.Prices[item] {
 		data.Prices[item] = newPrice
 		dailyData.Prices[item] = newPrice
 
-		// Обновление клиентам
+		// Рассылаем клиентам
 		clientsMu.Lock()
 		for client := range clients {
-			if err := client.WriteJSON(data.Prices); err != nil {
-				log.Printf("[WS error] Ошибка при отправке данных клиенту: %v", err)
-			}
+			client.WriteJSON(data.Prices)
 		}
 		clientsMu.Unlock()
 
-		// Обновление Telegram
+		// Telegram
 		updateTelegramMessage()
 	}
 }
+
 
 
 
