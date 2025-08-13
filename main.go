@@ -119,6 +119,7 @@ var (
 		BuyStats  map[string]int
 		SellStats map[string]int
 		LastTrade map[string]time.Time
+		TradeHistory map[string][]TradeLog
 	}
 	dataMu sync.Mutex
 
@@ -139,6 +140,7 @@ var (
 		"elytra-unbreak": time.Now(),
 	}
 )
+
 
 func main() {
 	loc, err := time.LoadLocation(timezone)
@@ -310,14 +312,16 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 		dataMu.Lock()
         switch msg.Action {
-        case "buy":
-            data.BuyStats[msg.Type]++
-            data.LastTrade[msg.Type] = time.Now()
-            adjustPrice(msg.Type)
-        case "sell":
-            data.SellStats[msg.Type]++
-            data.LastTrade[msg.Type] = time.Now()
-            adjustPrice(msg.Type)
+		case "buy":
+			data.BuyStats[msg.Type]++
+			data.LastTrade[msg.Type] = time.Now()
+			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "buy"})
+			adjustPrice(msg.Type)
+		case "sell":
+			data.SellStats[msg.Type]++
+			data.LastTrade[msg.Type] = time.Now()
+			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "sell"})
+		adjustPrice(msg.Type)
         case "info":
             ws.WriteJSON(data.Prices)
         }
@@ -345,107 +349,132 @@ func fixPrice() {
     }
 }
 
+type TradeLog struct {
+	Time  time.Time
+	Type  string // "buy" или "sell"
+}
+
+var swordTimesMu sync.Mutex
+
 func adjustPrice(item string) {
-    cfg, ok := itemsConfig[item]
-    if !ok {
-        return
-    }
-
-    now := time.Now()
-    buyCount := 0
-    sellCount := 0
-
-    // Считаем сделки за установленный период
-    for t, action := range data.LastTrade {
-        if now.Sub(action) > cfg.AnalysisTime {
-            continue
-        }
-        if t == item {
-            buyCount += data.BuyStats[t]
-            sellCount += data.SellStats[t]
-        }
-    }
-
-	if swordTimes[item].Add(itemsConfig[item].AnalysisTime).After(time.Now()) {
-    	if buyCount < itemsConfig[item].NormalSales {
-			return
-		}
-		swordTimes[item] = time.Now()
+	cfg, ok := itemsConfig[item]
+	if !ok {
+		return
 	}
 
-    // Изменяем цену по правилам
-    newPrice := data.Prices[item]
-    if buyCount > sellCount+cfg.NormalSales {
-        newPrice -= cfg.PriceStep
+	now := time.Now()
+
+	// Подсчёт за последние X минут
+	var buyCount, sellCount int
+	entries := data.TradeHistory[item]
+	filtered := []TradeLog{}
+	for _, trade := range entries {
+		if now.Sub(trade.Time) <= cfg.AnalysisTime {
+			filtered = append(filtered, trade)
+			if trade.Type == "buy" {
+				buyCount++
+			} else if trade.Type == "sell" {
+				sellCount++
+			}
+		}
+	}
+	data.TradeHistory[item] = filtered // оставляем только свежие записи
+
+	// Блокировка работы с временем
+	swordTimesMu.Lock()
+	timePassed := now.Sub(swordTimes[item]) >= cfg.AnalysisTime
+	enoughSales := buyCount >= cfg.NormalSales
+	if !timePassed && !enoughSales {
+		swordTimesMu.Unlock()
+		return
+	}
+	swordTimes[item] = now
+	swordTimesMu.Unlock()
+
+	// Ценообразование
+	newPrice := data.Prices[item]
+
+	if buyCount > sellCount+cfg.NormalSales {
+		newPrice -= cfg.PriceStep
 		if newPrice < cfg.MinPrice {
 			newPrice = cfg.MinPrice
 		}
-    } else if buyCount < cfg.NormalSales {
-        newPrice += cfg.PriceStep
-    }
-	if newPrice >= cfg.MaxPrice && buyCount < cfg.NormalSales {
-		newPrice = cfg.BasePrice
+	} else if buyCount < cfg.NormalSales {
+		newPrice += cfg.PriceStep
+		if newPrice > cfg.MaxPrice {
+			newPrice = cfg.BasePrice // сброс
+		}
 	}
 
-    // Применяем изменения
-    if newPrice != data.Prices[item] {
-        data.Prices[item] = newPrice
-        dailyData.Prices[item] = newPrice
+	if newPrice != data.Prices[item] {
+		data.Prices[item] = newPrice
+		dailyData.Prices[item] = newPrice
 
-        // Рассылаем обновленные цены
-        clientsMu.Lock()
-        for client := range clients {
-            err := client.WriteJSON(data.Prices)
-
-			if err != nil {
-				log.Print(err, "Отправка цен клиенту")
+		// Обновление клиентам
+		clientsMu.Lock()
+		for client := range clients {
+			if err := client.WriteJSON(data.Prices); err != nil {
+				log.Printf("[WS error] Ошибка при отправке данных клиенту: %v", err)
 			}
-        }
-        clientsMu.Unlock()
+		}
+		clientsMu.Unlock()
 
-        // Обновляем сообщение в Telegram
-		
-        updateTelegramMessage()
-    }
+		// Обновление Telegram
+		updateTelegramMessage()
+	}
 }
+
 
 
 func updateTelegramMessage() {
-    // Получаем текущее время
-    currentTime := time.Now().Format("2006-01-02 15:04:05")
+	currentTime := time.Now().Format("2006-01-02 15:04:05")
 
-    // Формируем текст сообщения с текущим временем
-    msgText := fmt.Sprintf("📊 Статистика за %s\nПоследнее обновление: %s\n\n", dailyData.Date, currentTime)
+	msgText := fmt.Sprintf("📊 Статистика за %s\nПоследнее обновление: %s\n\n", dailyData.Date, currentTime)
 
-    for item := range itemsConfig {
-        msgText += fmt.Sprintf(
-            "🔹 %s: %d ₽\n🛒 Куплено: %d\n💰 Продано: %d\n\n",
-            item,
-            data.Prices[item],
-            data.BuyStats[item],
-            data.SellStats[item],
-        )
-    }
+	for item := range itemsConfig {
+		msgText += fmt.Sprintf(
+			"🔹 %s: %d ₽\n🛒 Куплено: %d\n💰 Продано: %d\n\n",
+			item,
+			data.Prices[item],
+			data.BuyStats[item],
+			data.SellStats[item],
+		)
+	}
 
-    // Создаем новое сообщение или редактируем существующее
-    ctx := context.Background()
-    if dailyData.MessageID == 0 {
-        msg, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
-            ChatID: chatID,
-            Text:   msgText,
-        })
-        if err == nil {
-            dailyData.MessageID = msg.ID
-            saveDailyData()
-        }
-    } else {
-        _, err := tgBot.EditMessageText(ctx, &bot.EditMessageTextParams{
-            ChatID:    chatID,
-            MessageID: dailyData.MessageID,
-            Text:      msgText,
-        })
-        if err != nil {
-            log.Printf("Ошибка обновления сообщения: %v", err)
-        }
-    }
+	ctx := context.Background()
+
+	if dailyData.MessageID == 0 {
+		msg, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: chatID,
+			Text:   msgText,
+		})
+		if err != nil {
+			log.Printf("[Telegram error] Не удалось отправить новое сообщение: %v", err)
+			return
+		}
+		dailyData.MessageID = msg.ID
+		saveDailyData()
+	} else {
+		_, err := tgBot.EditMessageText(ctx, &bot.EditMessageTextParams{
+			ChatID:    chatID,
+			MessageID: dailyData.MessageID,
+			Text:      msgText,
+		})
+		if err != nil {
+			log.Printf("[Telegram error] Не удалось обновить сообщение: %v", err)
+
+			// Попробуем отправить заново, если редактирование не удалось (например, сообщение удалено)
+			msg, sendErr := tgBot.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID: chatID,
+				Text:   msgText,
+			})
+			if sendErr == nil {
+				dailyData.MessageID = msg.ID
+				saveDailyData()
+			} else {
+				log.Printf("[Telegram error] Повторная отправка тоже не удалась: %v", sendErr)
+			}
+		}
+	}
 }
+
