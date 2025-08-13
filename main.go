@@ -28,9 +28,14 @@ var (
 )
 
 var (
-	clientItems   = make(map[*websocket.Conn]map[string]bool)
+	clientItems   = make(map[*websocket.Conn]map[string]int)
 	clientItemsMu sync.Mutex
 )
+
+var itemLimit = map[string]int{
+	"netherite_sword": 75,
+	"elytra": 13,
+}
 
 type ItemConfig struct {
 	BasePrice    int
@@ -174,7 +179,6 @@ func main() {
 
 	// WebSocket сервер
 	http.HandleFunc("/ws", handleConnections)
-	http.HandleFunc("/presence", handlePresence)
 	go func() {
 		log.Println("Server started on :8080")
 		log.Print(http.ListenAndServe(":8080", nil))
@@ -285,49 +289,50 @@ func saveDailyData() {
 }
 
 func handleConnections(w http.ResponseWriter, r *http.Request) {
-    ws, err := upgrader.Upgrade(w, r, nil)
-    if err != nil {
-        log.Print(err, " upgrade error")
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Print(err, " upgrade error")
 		return
-    }
-    defer ws.Close()
+	}
+	defer ws.Close()
 
-    clientsMu.Lock()
-    clients[ws] = true
-    clientsMu.Unlock()
+	clientsMu.Lock()
+	clients[ws] = true
+	clientsMu.Unlock()
 
-    // Отправляем текущие цены при подключении
-    dataMu.Lock()
-    ws.WriteJSON(data.Prices)
-    dataMu.Unlock()
+	clientItemsMu.Lock()
+	clientItems[ws] = make(map[string]int)
+	clientItemsMu.Unlock()
 
-    for {
-    	var msg struct {
-    		Action string
-    		Type   string
+	defer func() {
+		clientsMu.Lock()
+		delete(clients, ws)
+		clientsMu.Unlock()
+
+		clientItemsMu.Lock()
+		delete(clientItems, ws)
+		clientItemsMu.Unlock()
+	}()
+
+	// Отправляем текущие цены при подключении
+	dataMu.Lock()
+	ws.WriteJSON(data.Prices)
+	dataMu.Unlock()
+
+	for {
+		var msg struct {
+			Action string `json:"action"` // buy, sell, info, presence
+			Type   string `json:"type"`   // тип предмета
+			Count  int    `json:"count"`  // если presence
 		}
 
-		// Сначала читаем сырые данные
-		var rawData json.RawMessage
-		if err := ws.ReadJSON(&rawData); err != nil {
-		    clientsMu.Lock()
-		    delete(clients, ws)
- 		  	 clientsMu.Unlock()
- 		  	 log.Print(err, " readJson error")
- 		   break
-		}
-
-		// Логируем сырой JSON
-		log.Printf("Received JSON: %s", string(rawData))
-
-		// Затем парсим в структуру
-		if err := json.Unmarshal(rawData, &msg); err != nil {
- 		   	log.Printf("Failed to unmarshal JSON: %v, raw data: %s", err, string(rawData))
-  		  	break
+		if err := ws.ReadJSON(&msg); err != nil {
+			log.Printf("read error: %v", err)
+			break
 		}
 
 		dataMu.Lock()
-        switch msg.Action {
+		switch msg.Action {
 		case "buy":
 			data.BuyStats[msg.Type]++
 			data.LastTrade[msg.Type] = time.Now()
@@ -337,49 +342,36 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			data.SellStats[msg.Type]++
 			data.LastTrade[msg.Type] = time.Now()
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "sell"})
-		adjustPrice(msg.Type)
-        case "info":
-            ws.WriteJSON(data.Prices)
-        }
-        saveDailyData()
-        dataMu.Unlock()
-    }
+			adjustPrice(msg.Type)
+		case "info":
+			ws.WriteJSON(data.Prices)
+		case "presence":
+			clientItemsMu.Lock()
+			if msg.Count <= 0 {
+				delete(clientItems[ws], msg.Type)
+			} else {
+				clientItems[ws][msg.Type] = msg.Count
+			}
+			clientItemsMu.Unlock()
+		}
+		saveDailyData()
+		dataMu.Unlock()
+	}
 }
 
-func handlePresence(w http.ResponseWriter, r *http.Request) {
-	ws, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Printf("[presence] upgrade error: %v", err)
-		return
-	}
-	defer ws.Close()
 
+
+func getItemTypeCount(itemType string) int {
 	clientItemsMu.Lock()
-	clientItems[ws] = make(map[string]bool)
-	clientItemsMu.Unlock()
+	defer clientItemsMu.Unlock()
 
-	defer func() {
-		clientItemsMu.Lock()
-		delete(clientItems, ws)
-		clientItemsMu.Unlock()
-	}()
-
-	for {
-		var msg struct {
-			Type   string `json:"type"`   // Тип предмета (например, "netherite_sword")
-			Active bool   `json:"active"` // true — у клиента есть, false — убрал
+	count := 0
+	for _, items := range clientItems {
+		if c, ok := items[itemType]; ok {
+			count += c
 		}
-		if err := ws.ReadJSON(&msg); err != nil {
-			log.Printf("[presence] read error: %v", err)
-			break
-		}
-
-		clientItemsMu.Lock()
-		if _, ok := clientItems[ws]; ok {
-			clientItems[ws][msg.Type] = msg.Active
-		}
-		clientItemsMu.Unlock()
 	}
+	return count
 }
 
 func fixPrice() {
@@ -451,12 +443,18 @@ func adjustPrice(item string) {
 		if newPrice < cfg.MinPrice {
 			newPrice = cfg.MinPrice
 		}
-	} else if buyCount < cfg.NormalSales {
+} else if buyCount < cfg.NormalSales {
+	itemTypeCount := getItemTypeCount(cfg.Type)
+	limit, exists := itemLimit[cfg.Type]
+	if exists && itemTypeCount > limit {
+		log.Printf("Цена %s не повышена: %d %s у клиентов превышает лимит %d", item, itemTypeCount, cfg.Type, limit)
+	} else {
 		newPrice += cfg.PriceStep
 		if newPrice > cfg.MaxPrice {
 			newPrice = cfg.BasePrice // сброс
 		}
 	}
+}
 
 	if newPrice != data.Prices[item] {
 		data.Prices[item] = newPrice
