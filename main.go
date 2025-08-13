@@ -33,8 +33,8 @@ var (
 )
 
 var itemLimit = map[string]int{
-	"netherite_sword": 75,
-	"elytra": 13,
+	"netherite_sword": 140,
+	"elytra": 24,
 }
 
 type ItemConfig struct {
