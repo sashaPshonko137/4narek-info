@@ -27,6 +27,11 @@ var (
 	tgBot *bot.Bot
 )
 
+var (
+	clientItems   = make(map[*websocket.Conn]map[string]bool)
+	clientItemsMu sync.Mutex
+)
+
 type ItemConfig struct {
 	BasePrice    int
 	NormalSales  int
@@ -34,6 +39,7 @@ type ItemConfig struct {
 	AnalysisTime time.Duration
 	MinPrice     int
 	MaxPrice     int
+	Type         string
 }
 
 type DailyData struct {
@@ -49,19 +55,21 @@ var (
 	itemsConfig = map[string]ItemConfig{
 		"sword5": {
 			BasePrice:    2100001,
-			NormalSales:  3,
+			NormalSales:  5,
 			PriceStep:    100000,
-			AnalysisTime: 5 * time.Minute,
+			AnalysisTime: 10 * time.Minute,
 			MinPrice: 500001,
 			MaxPrice: 5000001,
+			Type: "netherite_sword",
 		},
 		"sword6": {
 			BasePrice:    2500002,
-			NormalSales:  3,
+			NormalSales:  5,
 			PriceStep:    100000,
-			AnalysisTime: 8 * time.Minute,
+			AnalysisTime: 16 * time.Minute,
 			MinPrice: 600002,
 			MaxPrice: 6000002,
+			Type: "netherite_sword",
 		},
 		"sword7": {
 			BasePrice:    3500003,
@@ -70,6 +78,7 @@ var (
 			AnalysisTime: 10 * time.Minute,
 			MinPrice: 700003,
 			MaxPrice: 7000003,
+			Type: "netherite_sword",
 		},
 		"pochti-megasword": {
 			BasePrice:    3500004,
@@ -78,6 +87,7 @@ var (
 			AnalysisTime: 23 * time.Minute,
 			MinPrice: 100004,
 			MaxPrice: 8000004,
+			Type: "netherite_sword",
 		},
 		"megasword": {
 			BasePrice:    5000005,
@@ -86,14 +96,16 @@ var (
 			AnalysisTime: 23 * time.Minute,
 			MinPrice: 1200005,
 			MaxPrice: 10000005,
+			Type: "netherite_sword",
 		},
 		"elytra": {
 			BasePrice:    1200006,
 			NormalSales:  3,
 			PriceStep:    100000,
-			AnalysisTime: 7 * time.Minute,
+			AnalysisTime: 10 * time.Minute,
 			MinPrice: 2000006,
 			MaxPrice: 30000006,
+			Type: "elytra",
 		},
 		"elytra-mend": {
 			BasePrice:    4500007,
@@ -102,14 +114,16 @@ var (
 			AnalysisTime: 20 * time.Minute,
 			MinPrice: 500007,
 			MaxPrice: 8000007,
+			Type: "elytra",
 		},
 		"elytra-unbreak": {
 			BasePrice:    1700008,
 			NormalSales:  3,
 			PriceStep:    100000,
-			AnalysisTime: 9 * time.Minute,
+			AnalysisTime: 10 * time.Minute,
 			MinPrice: 300008,
 			MaxPrice: 5000008,
+			Type: "elytra",
 		},
 
 	}
@@ -160,6 +174,7 @@ func main() {
 
 	// WebSocket сервер
 	http.HandleFunc("/ws", handleConnections)
+	http.HandleFunc("/presence", handlePresence)
 	go func() {
 		log.Println("Server started on :8080")
 		log.Print(http.ListenAndServe(":8080", nil))
@@ -329,6 +344,42 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
         saveDailyData()
         dataMu.Unlock()
     }
+}
+
+func handlePresence(w http.ResponseWriter, r *http.Request) {
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("[presence] upgrade error: %v", err)
+		return
+	}
+	defer ws.Close()
+
+	clientItemsMu.Lock()
+	clientItems[ws] = make(map[string]bool)
+	clientItemsMu.Unlock()
+
+	defer func() {
+		clientItemsMu.Lock()
+		delete(clientItems, ws)
+		clientItemsMu.Unlock()
+	}()
+
+	for {
+		var msg struct {
+			Type   string `json:"type"`   // Тип предмета (например, "netherite_sword")
+			Active bool   `json:"active"` // true — у клиента есть, false — убрал
+		}
+		if err := ws.ReadJSON(&msg); err != nil {
+			log.Printf("[presence] read error: %v", err)
+			break
+		}
+
+		clientItemsMu.Lock()
+		if _, ok := clientItems[ws]; ok {
+			clientItems[ws][msg.Type] = msg.Active
+		}
+		clientItemsMu.Unlock()
+	}
 }
 
 func fixPrice() {
