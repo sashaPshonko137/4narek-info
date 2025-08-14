@@ -21,6 +21,11 @@ const (
 	timezone = "Asia/Tashkent"
 )
 
+type PriceAndRatio struct {
+	Prices map[string]int     `json:"prices"`
+	Ratios map[string]float64 `json:"ratios"`
+}
+
 var (
 	upgrader = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool { return true },
@@ -60,13 +65,14 @@ var itemStockNorms = map[string]int{
 }
 
 type DailyData struct {
-	Date     string         `json:"date"`
-	Prices   map[string]int `json:"prices"`
-	BuyStats map[string]int `json:"buy_stats"`
-	SellStats map[string]int `json:"sell_stats"`
-	MessageID int           `json:"message_id"`
+	Date       string             `json:"date"`
+	Prices     map[string]int     `json:"prices"`
+	Ratios     map[string]float64 `json:"ratios"` // 🆕
+	BuyStats   map[string]int     `json:"buy_stats"`
+	SellStats  map[string]int     `json:"sell_stats"`
+	MessageID  int                `json:"message_id"`
 }
-//io
+
 var (
 	
 	itemsConfig = map[string]ItemConfig{
@@ -145,13 +151,15 @@ var (
 
 	}
 
-	data struct {
-		Prices    map[string]int
-		BuyStats  map[string]int
-		SellStats map[string]int
-		LastTrade map[string]time.Time
-		TradeHistory map[string][]TradeLog
-	}
+data struct {
+	Prices       map[string]int
+	Ratios       map[string]float64 // 🆕
+	BuyStats     map[string]int
+	SellStats    map[string]int
+	LastTrade    map[string]time.Time
+	TradeHistory map[string][]TradeLog
+}
+
 	dataMu sync.Mutex
 
 	clients   = make(map[*websocket.Conn]bool)
@@ -224,12 +232,15 @@ data.BuyStats = make(map[string]int)
 data.SellStats = make(map[string]int)
 data.LastTrade = make(map[string]time.Time)
 data.TradeHistory = make(map[string][]TradeLog)
+data.Ratios = make(map[string]float64)
+
 
 	dailyData = DailyData{
 		Date:     today,
 		Prices:   make(map[string]int),
 		BuyStats: make(map[string]int),
 		SellStats: make(map[string]int),
+		Ratios: make(map[string]float64),
 	}
 
 	// Загрузка из файла, если он существует и за сегодня
@@ -251,12 +262,16 @@ data.TradeHistory = make(map[string][]TradeLog)
 	}
 
 	// Устанавливаем базовые цены для новых предметов
-	for item, cfg := range itemsConfig {
-		if _, exists := data.Prices[item]; !exists {
-			data.Prices[item] = cfg.BasePrice
-			dailyData.Prices[item] = cfg.BasePrice
-		}
+for item, cfg := range itemsConfig {
+	if _, exists := data.Prices[item]; !exists {
+		data.Prices[item] = cfg.BasePrice
+		dailyData.Prices[item] = cfg.BasePrice
 	}
+	if _, exists := data.Ratios[item]; !exists {
+		data.Ratios[item] = 0.8                // 🆕 стартовый коэффициент
+		dailyData.Ratios[item] = 0.8           // 🆕
+	}
+}
 
 	// Создаем/обновляем сообщение в Telegram
 	updateTelegramMessage()
@@ -287,6 +302,8 @@ func saveDailyData() {
 	dailyData.Prices = data.Prices
 	dailyData.BuyStats = data.BuyStats
 	dailyData.SellStats = data.SellStats
+	dailyData.Prices = data.Prices
+	dailyData.Ratios = data.Ratios
 
 	file, err := json.MarshalIndent(dailyData, "", "  ")
 	if err != nil {
@@ -328,7 +345,10 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 	// Отправляем текущие цены при подключении
 	dataMu.Lock()
-	ws.WriteJSON(data.Prices)
+	ws.WriteJSON(PriceAndRatio{
+	Prices: data.Prices,
+	Ratios: data.Ratios,
+})
 	dataMu.Unlock()
 
 	for {
@@ -369,7 +389,10 @@ var msg struct {
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "sell"})
 			adjustPrice(msg.Type)
 		case "info":
-			ws.WriteJSON(data.Prices)
+			ws.WriteJSON(PriceAndRatio{
+		Prices: data.Prices,
+		Ratios: data.Ratios,
+	})
 case "presence":
 	clientItemsMu.Lock()
 	clientItems[ws] = make(map[string]int)
@@ -456,6 +479,16 @@ func getItemCount(item string) int {
 	return count
 }
 
+func countRecentBuys(item string, since time.Time) int {
+	count := 0
+	for _, trade := range data.TradeHistory[item] {
+		if trade.Type == "buy" && trade.Time.After(since) {
+			count++
+		}
+	}
+	return count
+}
+
 var lastPriceUpdate = make(map[string]time.Time)
 
 func adjustPrice(item string) {
@@ -466,7 +499,7 @@ func adjustPrice(item string) {
 
 	now := time.Now()
 
-	// Проверка интервала: не менять цену чаще, чем cfg.AnalysisTime
+	// Блокировка
 	swordTimesMu.Lock()
 	lastUpdate, updatedBefore := swordTimes[item]
 	if updatedBefore && now.Sub(lastUpdate) < cfg.AnalysisTime {
@@ -480,55 +513,72 @@ func adjustPrice(item string) {
 		lastUpdate = now.Add(-cfg.AnalysisTime)
 	}
 
+	// Получаем статистику
 	sales := countRecentSales(item, lastUpdate)
+	buys := countRecentBuys(item, lastUpdate)
 	newPrice := data.Prices[item]
 	priceBefore := newPrice
+	ratioBefore := data.Ratios[item]
+	ratio := ratioBefore
 
-	// Проверяем лимит на конкретный предмет
-	stockNorm, hasNorm := itemStockNorms[item]
+	// Определяем забитость
 	totalItemStock := getItemCount(item)
+	stockNorm := itemStockNorms[item]
+	hasNorm := stockNorm > 0
 
 	if sales >= cfg.NormalSales {
-		// Продаётся нормально — цену не меняем
-	} else if hasNorm && totalItemStock < stockNorm {
-		// Возможно, виноват другой предмет этого же типа
-		for otherItem, otherCfg := range itemsConfig {
-			if otherItem == item || otherCfg.Type != cfg.Type {
-				continue
+		if buys <= sales+2 {
+			// Всё нормально, ничего не делаем
+		} else {
+			if ratio == 0.8 {
+				ratio = 0.7
+			} else {
+				newPrice -= cfg.PriceStep
+				if newPrice < cfg.MinPrice {
+					newPrice = cfg.MinPrice
+				}
 			}
-
-			otherLastUpdate, ok := swordTimes[otherItem]
-			if !ok {
-				otherLastUpdate = now.Add(-otherCfg.AnalysisTime)
-			}
-
-			otherSales := countRecentSales(otherItem, otherLastUpdate)
-			if otherSales >= otherCfg.NormalSales {
-				continue
-			}
-
-			otherPrice := data.Prices[otherItem]
-			if otherPrice > newPrice {
-				// Нашли паразита — не меняем цену
-				goto sendStats
-			}
-		}
-
-		// Нет паразита — повышаем цену
-		newPrice += cfg.PriceStep
-		if newPrice > cfg.MaxPrice {
-			newPrice = cfg.MaxPrice
 		}
 	} else {
-		// Просто понижаем цену (в наличии много или нет норм)
-		newPrice -= cfg.PriceStep
-		if newPrice < cfg.MinPrice {
-			newPrice = cfg.MinPrice
+		isParasite := false
+
+		// Поиск паразита
+		if hasNorm && totalItemStock < stockNorm {
+			for otherItem, otherCfg := range itemsConfig {
+				if otherItem == item || otherCfg.Type != cfg.Type {
+					continue
+				}
+				otherSales := countRecentSales(otherItem, lastUpdate)
+				if otherSales < otherCfg.NormalSales && data.Prices[otherItem] > newPrice {
+					isParasite = true
+					break
+				}
+			}
+		}
+
+		if isParasite {
+			// Не трогаем цену
+		} else {
+			if hasNorm && totalItemStock < stockNorm {
+				if ratio == 0.7 {
+					ratio = 0.8
+				} else {
+					newPrice += cfg.PriceStep
+					if newPrice > cfg.MaxPrice {
+						newPrice = cfg.MaxPrice
+					}
+				}
+			} else {
+				// Высокая забитость — понижаем цену
+				newPrice -= cfg.PriceStep
+				if newPrice < cfg.MinPrice {
+					newPrice = cfg.MinPrice
+				}
+			}
 		}
 	}
 
-sendStats:
-	// Всегда отправляем интервал-статистику, даже если цена не изменилась
+	// Отправка Telegram отчета
 	sendIntervalStatsToTelegram(
 		item,
 		lastUpdate,
@@ -539,22 +589,25 @@ sendStats:
 		newPrice,
 	)
 
-	if newPrice != data.Prices[item] {
+	// Обновление данных
+	if newPrice != data.Prices[item] || ratio != ratioBefore {
 		data.Prices[item] = newPrice
 		dailyData.Prices[item] = newPrice
+		data.Ratios[item] = ratio
+		dailyData.Ratios[item] = ratio
 		lastPriceUpdate[item] = now
 
-		// Обновляем клиентам
+		// Рассылаем клиентам
 		clientsMu.Lock()
 		for client := range clients {
 			client.WriteJSON(data.Prices)
 		}
 		clientsMu.Unlock()
 
-		// Обновляем основное сообщение
 		updateTelegramMessage()
 	}
 }
+
 
 
 
@@ -639,6 +692,7 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 			"📦 Покупки: *%d*\n"+
 			"📊 Продажи: *%d* из *%d* (норма)\n"+
 			"💸 Цена: %d → %d\n"+
+			"🧮 Коэффициент: %.2f\n"+
 			"👥 Онлайн: %d игроков",
 		item,
 		status,
@@ -649,6 +703,7 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		expectedSales,
 		priceBefore,
 		priceAfter,
+		data.Ratios[item],
 		onlineCount,
 	)
 
