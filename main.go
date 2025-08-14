@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"sync"
@@ -499,7 +500,7 @@ func adjustPrice(item string) {
 	ratio := ratioBefore
 
 	// ------------------------------
-	// Новая логика "перегрузки по пропорции"
+	// 1. Логика пропорциональной загрузки слотов по типу
 	typeItems := make(map[string]struct{})
 	totalSales := 0
 
@@ -510,7 +511,6 @@ func adjustPrice(item string) {
 		}
 	}
 
-	// Подсчет всех предметов этого типа на руках
 	totalTypeStock := 0
 	clientItemsMu.Lock()
 	for _, items := range clientItems {
@@ -522,7 +522,7 @@ func adjustPrice(item string) {
 
 	typeSlotLimit, ok := itemLimit[cfg.Type]
 	if !ok || totalSales == 0 {
-		typeSlotLimit = 1 // чтобы не делить на 0
+		typeSlotLimit = 1
 		totalSales = 1
 	}
 
@@ -532,43 +532,45 @@ func adjustPrice(item string) {
 	canFit := actualStock <= allocatedSlots
 	// ------------------------------
 
-	// Логика изменения цены
-	if sales >= cfg.NormalSales {
-		if buys <= sales+2 {
-			// Всё нормально, не трогаем
-		} else {
-			if ratio == 0.8 {
-				ratio = 0.7
-			} else {
-				newPrice -= cfg.PriceStep
-				ratio = 0.8
-				if newPrice < cfg.MinPrice {
-					newPrice = cfg.MinPrice
-				}
-			}
-		}
-	} else {
-		if canFit {
-			// Место есть — спрос низкий => поднимаем цену
-			if ratio == 0.7 {
-				ratio = 0.8
-			} else {
-				newPrice += cfg.PriceStep
-				if newPrice > cfg.MaxPrice {
-					newPrice = cfg.MaxPrice
-				}
-			}
-		} else {
-			// Слоты заняты другими => понижаем цену
-			newPrice -= cfg.PriceStep
-			ratio = 0.8
-			if newPrice < cfg.MinPrice {
-				newPrice = cfg.MinPrice
-			}
-		}
-	}
+	// 2. Изменение цены
+if sales >= cfg.NormalSales {
+    // Продаётся хорошо — проверим, нет ли подозрительно много покупок
+    expectedBuys := float64(sales) + 1.5 * math.Sqrt(float64(sales))
+    if sales >= 3 && float64(buys) > expectedBuys {
+        // Покупок слишком много => возможно, цена завышена
+        if ratio == 0.8 {
+            ratio = 0.7
+        } else {
+            newPrice -= cfg.PriceStep
+            ratio = 0.8
+            if newPrice < cfg.MinPrice {
+                newPrice = cfg.MinPrice
+            }
+        }
+    }
+} else {
+    if canFit {
+        // Слоты не перегружены — спрос мал, поднимем цену
+        if ratio == 0.7 {
+            ratio = 0.8
+        } else {
+            newPrice += cfg.PriceStep
+            if newPrice > cfg.MaxPrice {
+                newPrice = cfg.MaxPrice
+            }
+        }
+    } else {
+        // Слоты забиты другими — цена слишком высокая, понижаем
+        newPrice -= cfg.PriceStep
+        ratio = 0.8
+        if newPrice < cfg.MinPrice {
+            newPrice = cfg.MinPrice
+        }
+    }
+}
 
-	// Отправка статистики в Telegram
+
+	// 3. Отправка статистики
 	sendIntervalStatsToTelegram(
 		item,
 		lastUpdate,
@@ -579,7 +581,7 @@ func adjustPrice(item string) {
 		newPrice,
 	)
 
-	// Обновление данных
+	// 4. Обновление данных и оповещение клиентов
 	if newPrice != data.Prices[item] || ratio != ratioBefore {
 		data.Prices[item] = newPrice
 		dailyData.Prices[item] = newPrice
@@ -587,7 +589,6 @@ func adjustPrice(item string) {
 		dailyData.Ratios[item] = ratio
 		lastPriceUpdate[item] = now
 
-		// Обновление клиентов
 		clientsMu.Lock()
 		for client := range clients {
 			client.WriteJSON(data.Prices)
@@ -597,6 +598,7 @@ func adjustPrice(item string) {
 		updateTelegramMessage()
 	}
 }
+
 
 func updateTelegramMessage() {
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
