@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -615,11 +616,16 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		status = "⚠️"
 	}
 
+	// 1. Получаем онлайн с внешнего сервера
+	onlineCount := getOnlineCount()
+
+	// 2. Формируем сообщение
 	msg := fmt.Sprintf(
 		"*%s* %s\n"+
 			"⏳ Интервал: %s - %s\n"+
 			"📊 Продажи: *%d* из *%d* (норма)\n"+
-			"💸 Цена: %d → %d",
+			"💸 Цена: %d → %d\n"+
+			"👥 Онлайн: %d игроков",
 		item,
 		status,
 		start.Format("15:04:05"),
@@ -628,15 +634,73 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		expectedSales,
 		priceBefore,
 		priceAfter,
+		onlineCount,
 	)
 
+	// 3. Отправляем в Telegram
 	ctx := context.Background()
 	_, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:    -4633184325, // твоя группа
+		ChatID:    -4633184325,
 		Text:      msg,
 		ParseMode: "Markdown",
 	})
 	if err != nil {
 		log.Printf("[Telegram] Ошибка при отправке интервал-статы: %v", err)
 	}
+
+	// 4. Сохраняем лог в файл (без Markdown)
+	plainLog := fmt.Sprintf(
+		"%s [%s → %s] %s | Продажи: %d/%d | Цена: %d→%d | Онлайн: %d\n",
+		item,
+		start.Format("15:04:05"),
+		end.Format("15:04:05"),
+		status,
+		actualSales,
+		expectedSales,
+		priceBefore,
+		priceAfter,
+		onlineCount,
+	)
+
+	appendToFile("logs_interval.txt", plainLog)
+}
+
+
+func appendToFile(filename, content string) {
+	f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Printf("Ошибка открытия файла лога: %v", err)
+		return
+	}
+	defer f.Close()
+
+	if _, err := f.WriteString(content); err != nil {
+		log.Printf("Ошибка записи в файл лога: %v", err)
+	}
+}
+
+func getOnlineCount() int {
+	resp, err := http.Get("http://45.141.76.110:5000/status")
+	if err != nil {
+		log.Printf("Ошибка запроса онлайна: %v", err)
+		return -1
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Ошибка чтения тела ответа: %v", err)
+		return -1
+	}
+
+	var status struct {
+		PlayersOnline int `json:"players_online"`
+	}
+
+	if err := json.Unmarshal(body, &status); err != nil {
+		log.Printf("Ошибка парсинга JSON онлайна: %v", err)
+		return -1
+	}
+
+	return status.PlayersOnline
 }
