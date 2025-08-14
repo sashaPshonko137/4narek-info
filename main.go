@@ -71,7 +71,7 @@ var (
 	itemsConfig = map[string]ItemConfig{
 		"sword5": {
 			BasePrice:    2100001,
-			NormalSales:  20,
+			NormalSales:  10,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice: 500001,
@@ -80,7 +80,7 @@ var (
 		},
 		"sword6": {
 			BasePrice:    2500002,
-			NormalSales:  6,
+			NormalSales:  5,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice: 600002,
