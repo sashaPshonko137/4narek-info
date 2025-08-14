@@ -65,7 +65,7 @@ type DailyData struct {
 	SellStats map[string]int `json:"sell_stats"`
 	MessageID int           `json:"message_id"`
 }
-
+//io
 var (
 	
 	itemsConfig = map[string]ItemConfig{
