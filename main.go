@@ -409,29 +409,6 @@ case "presence":
 	}
 }
 
-
-
-
-func getItemTypeCount(itemType string) int {
-	clientItemsMu.Lock()
-	defer clientItemsMu.Unlock()
-
-	count := 0
-	for _, items := range clientItems {
-		for itemID, itemCount := range items {
-			cfg, exists := itemsConfig[itemID]
-			if !exists {
-				continue
-			}
-			if cfg.Type == itemType {
-				count += itemCount
-			}
-		}
-	}
-	return count
-}
-
-
 func fixPrice() {
 	for {
 		if getConnectedClientsCount() == 0 {
@@ -534,6 +511,7 @@ func adjustPrice(item string) {
 				ratio = 0.7
 			} else {
 				newPrice -= cfg.PriceStep
+				ratio = 0.8
 				if newPrice < cfg.MinPrice {
 					newPrice = cfg.MinPrice
 				}
@@ -571,6 +549,7 @@ func adjustPrice(item string) {
 			} else {
 				// Высокая забитость — понижаем цену
 				newPrice -= cfg.PriceStep
+				ratio = 0.8
 				if newPrice < cfg.MinPrice {
 					newPrice = cfg.MinPrice
 				}
