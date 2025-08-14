@@ -357,6 +357,11 @@ var msg struct {
 		dataMu.Lock()
 		switch msg.Action {
 		case "buy":
+			data.BuyStats[msg.Type]++
+			data.LastTrade[msg.Type] = time.Now()
+			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "buy"})
+			updateTelegramMessage()
+
 	
 		case "sell":
 			data.SellStats[msg.Type]++
@@ -619,10 +624,19 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 	// 1. Получаем онлайн с внешнего сервера
 	onlineCount := getOnlineCount()
 
-	// 2. Формируем сообщение
+	// 2. Подсчитываем покупки за интервал
+	buyCount := 0
+	for _, trade := range data.TradeHistory[item] {
+		if trade.Type == "buy" && trade.Time.After(start) && trade.Time.Before(end) {
+			buyCount++
+		}
+	}
+
+	// 3. Формируем сообщение
 	msg := fmt.Sprintf(
 		"*%s* %s\n"+
 			"⏳ Интервал: %s - %s\n"+
+			"📦 Покупки: *%d*\n"+
 			"📊 Продажи: *%d* из *%d* (норма)\n"+
 			"💸 Цена: %d → %d\n"+
 			"👥 Онлайн: %d игроков",
@@ -630,6 +644,7 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		status,
 		start.Format("15:04:05"),
 		end.Format("15:04:05"),
+		buyCount,
 		actualSales,
 		expectedSales,
 		priceBefore,
@@ -637,7 +652,7 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		onlineCount,
 	)
 
-	// 3. Отправляем в Telegram
+	// 4. Отправляем в Telegram
 	ctx := context.Background()
 	_, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:    -4633184325,
@@ -648,13 +663,14 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		log.Printf("[Telegram] Ошибка при отправке интервал-статы: %v", err)
 	}
 
-	// 4. Сохраняем лог в файл (без Markdown)
+	// 5. Сохраняем лог в файл (без Markdown)
 	plainLog := fmt.Sprintf(
-		"%s [%s → %s] %s | Продажи: %d/%d | Цена: %d→%d | Онлайн: %d\n",
+		"%s [%s → %s] %s | Покупки: %d | Продажи: %d/%d | Цена: %d→%d | Онлайн: %d\n",
 		item,
 		start.Format("15:04:05"),
 		end.Format("15:04:05"),
 		status,
+		buyCount,
 		actualSales,
 		expectedSales,
 		priceBefore,
@@ -664,6 +680,7 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 
 	appendToFile("logs_interval.txt", plainLog)
 }
+
 
 
 func appendToFile(filename, content string) {
