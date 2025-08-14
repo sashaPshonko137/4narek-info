@@ -111,21 +111,26 @@ func main() {
 		log.Printf("Error loading location: %v", err)
 	}
 
+	// Инициализация бота Telegram
 	b, err := bot.New(token)
 	if err != nil {
 		log.Printf("Error creating bot: %v", err)
 	}
 	tgBot = b
 
+	// Загрузка данных за сегодня
 	loadDailyData(loc)
 
+	// WebSocket сервер
 	http.HandleFunc("/ws", handleConnections)
 	go func() {
 		log.Println("Server started on :8080")
 		log.Print(http.ListenAndServe(":8080", nil))
 	}()
 
+	// Проверка смены дня
 	go checkDayChange(loc)
+	//time.Sleep(1 * time.Minute)
 	go fixPrice()
 
 	select {}
