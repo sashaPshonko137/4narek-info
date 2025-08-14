@@ -1,0 +1,26 @@
+{
+  "date": "2025-08-15",
+  "prices": {
+    "elytra": 1200006,
+    "elytra-mend": 4500007,
+    "elytra-unbreak": 1700008,
+    "megasword": 5000005,
+    "pochti-megasword": 3500004,
+    "sword5": 2100001,
+    "sword6": 2500002,
+    "sword7": 3500003
+  },
+  "ratios": {
+    "elytra": 0.8,
+    "elytra-mend": 0.8,
+    "elytra-unbreak": 0.8,
+    "megasword": 0.8,
+    "pochti-megasword": 0.8,
+    "sword5": 0.8,
+    "sword6": 0.8,
+    "sword7": 0.8
+  },
+  "buy_stats": {},
+  "sell_stats": {},
+  "message_id": 7441
+}
