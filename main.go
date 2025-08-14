@@ -476,7 +476,7 @@ func adjustPrice(item string) {
 
 	now := time.Now()
 
-	// Блокировка
+	// Блокировка таймера
 	swordTimesMu.Lock()
 	lastUpdate, updatedBefore := swordTimes[item]
 	if updatedBefore && now.Sub(lastUpdate) < cfg.AnalysisTime {
@@ -498,14 +498,44 @@ func adjustPrice(item string) {
 	ratioBefore := data.Ratios[item]
 	ratio := ratioBefore
 
-	// Определяем забитость
-	totalItemStock := getItemCount(item)
-	stockNorm := itemStockNorms[item]
-	hasNorm := stockNorm > 0
+	// ------------------------------
+	// Новая логика "перегрузки по пропорции"
+	typeItems := make(map[string]struct{})
+	totalSales := 0
 
+	for otherItem, otherCfg := range itemsConfig {
+		if otherCfg.Type == cfg.Type {
+			typeItems[otherItem] = struct{}{}
+			totalSales += otherCfg.NormalSales
+		}
+	}
+
+	// Подсчет всех предметов этого типа на руках
+	totalTypeStock := 0
+	clientItemsMu.Lock()
+	for _, items := range clientItems {
+		for otherItem := range typeItems {
+			totalTypeStock += items[otherItem]
+		}
+	}
+	clientItemsMu.Unlock()
+
+	typeSlotLimit, ok := itemLimit[cfg.Type]
+	if !ok || totalSales == 0 {
+		typeSlotLimit = 1 // чтобы не делить на 0
+		totalSales = 1
+	}
+
+	itemShare := float64(cfg.NormalSales) / float64(totalSales)
+	allocatedSlots := int(itemShare * float64(typeSlotLimit))
+	actualStock := getItemCount(item)
+	canFit := actualStock <= allocatedSlots
+	// ------------------------------
+
+	// Логика изменения цены
 	if sales >= cfg.NormalSales {
 		if buys <= sales+2 {
-			// Всё нормально, ничего не делаем
+			// Всё нормально, не трогаем
 		} else {
 			if ratio == 0.8 {
 				ratio = 0.7
@@ -518,46 +548,27 @@ func adjustPrice(item string) {
 			}
 		}
 	} else {
-		isParasite := false
-
-		// Поиск паразита
-		if hasNorm && totalItemStock < stockNorm {
-			for otherItem, otherCfg := range itemsConfig {
-				if otherItem == item || otherCfg.Type != cfg.Type {
-					continue
-				}
-				otherSales := countRecentSales(otherItem, lastUpdate)
-				if otherSales < otherCfg.NormalSales && data.Prices[otherItem] > newPrice {
-					isParasite = true
-					break
+		if canFit {
+			// Место есть — спрос низкий => поднимаем цену
+			if ratio == 0.7 {
+				ratio = 0.8
+			} else {
+				newPrice += cfg.PriceStep
+				if newPrice > cfg.MaxPrice {
+					newPrice = cfg.MaxPrice
 				}
 			}
-		}
-
-		if isParasite {
-			// Не трогаем цену
 		} else {
-			if hasNorm && totalItemStock < stockNorm {
-				if ratio == 0.7 {
-					ratio = 0.8
-				} else {
-					newPrice += cfg.PriceStep
-					if newPrice > cfg.MaxPrice {
-						newPrice = cfg.MaxPrice
-					}
-				}
-			} else {
-				// Высокая забитость — понижаем цену
-				newPrice -= cfg.PriceStep
-				ratio = 0.8
-				if newPrice < cfg.MinPrice {
-					newPrice = cfg.MinPrice
-				}
+			// Слоты заняты другими => понижаем цену
+			newPrice -= cfg.PriceStep
+			ratio = 0.8
+			if newPrice < cfg.MinPrice {
+				newPrice = cfg.MinPrice
 			}
 		}
 	}
 
-	// Отправка Telegram отчета
+	// Отправка статистики в Telegram
 	sendIntervalStatsToTelegram(
 		item,
 		lastUpdate,
@@ -576,7 +587,7 @@ func adjustPrice(item string) {
 		dailyData.Ratios[item] = ratio
 		lastPriceUpdate[item] = now
 
-		// Рассылаем клиентам
+		// Обновление клиентов
 		clientsMu.Lock()
 		for client := range clients {
 			client.WriteJSON(data.Prices)
@@ -586,14 +597,6 @@ func adjustPrice(item string) {
 		updateTelegramMessage()
 	}
 }
-
-
-
-
-
-
-
-
 
 func updateTelegramMessage() {
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
