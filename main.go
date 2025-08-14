@@ -127,7 +127,7 @@ var (
 			BasePrice:    4500007,
 			NormalSales:  1,
 			PriceStep:    100000,
-			AnalysisTime: 10 * time.Minute,
+			AnalysisTime: 13 * time.Minute,
 			MinPrice: 500007,
 			MaxPrice: 8000007,
 			Type: "elytra",
@@ -470,31 +470,27 @@ func adjustPrice(item string) {
 	swordTimes[item] = now
 	swordTimesMu.Unlock()
 
-	// Если раньше не обновляли — считаем от AnalysisTime назад
 	if !updatedBefore {
 		lastUpdate = now.Add(-cfg.AnalysisTime)
 	}
 
 	sales := countRecentSales(item, lastUpdate)
-	if sales >= cfg.NormalSales {
-		// Продаётся нормально — ничего не меняем
-		return
-	}
-
 	newPrice := data.Prices[item]
+	priceBefore := newPrice
 
 	// Проверяем лимит на конкретный предмет
 	stockNorm, hasNorm := itemStockNorms[item]
 	totalItemStock := getItemCount(item)
 
-	if hasNorm && totalItemStock < stockNorm {
+	if sales >= cfg.NormalSales {
+		// Продаётся нормально — цену не меняем
+	} else if hasNorm && totalItemStock < stockNorm {
 		// Возможно, виноват другой предмет этого же типа
 		for otherItem, otherCfg := range itemsConfig {
 			if otherItem == item || otherCfg.Type != cfg.Type {
 				continue
 			}
 
-			// Сравниваем с момента последнего обновления паразита
 			otherLastUpdate, ok := swordTimes[otherItem]
 			if !ok {
 				otherLastUpdate = now.Add(-otherCfg.AnalysisTime)
@@ -507,8 +503,8 @@ func adjustPrice(item string) {
 
 			otherPrice := data.Prices[otherItem]
 			if otherPrice > newPrice {
-				// Нашли паразита — ничего не делаем
-				return
+				// Нашли паразита — не меняем цену
+				goto sendStats
 			}
 		}
 
@@ -525,24 +521,35 @@ func adjustPrice(item string) {
 		}
 	}
 
-	// Обновляем цену, если она изменилась
+sendStats:
+	// Всегда отправляем интервал-статистику, даже если цена не изменилась
+	sendIntervalStatsToTelegram(
+		item,
+		lastUpdate,
+		now,
+		sales,
+		cfg.NormalSales,
+		priceBefore,
+		newPrice,
+	)
+
 	if newPrice != data.Prices[item] {
 		data.Prices[item] = newPrice
 		dailyData.Prices[item] = newPrice
+		lastPriceUpdate[item] = now
 
-		lastPriceUpdate[item] = now // для точного учёта продаж после изменения
-
-		// Рассылаем клиентам
+		// Обновляем клиентам
 		clientsMu.Lock()
 		for client := range clients {
 			client.WriteJSON(data.Prices)
 		}
 		clientsMu.Unlock()
 
-		// Telegram
+		// Обновляем основное сообщение
 		updateTelegramMessage()
 	}
 }
+
 
 
 
@@ -602,3 +609,34 @@ func updateTelegramMessage() {
 	}
 }
 
+func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales, expectedSales, priceBefore, priceAfter int) {
+	status := "✅"
+	if actualSales < expectedSales {
+		status = "⚠️"
+	}
+
+	msg := fmt.Sprintf(
+		"*%s* %s\n"+
+			"⏳ Интервал: %s - %s\n"+
+			"📊 Продажи: *%d* из *%d* (норма)\n"+
+			"💸 Цена: %d → %d",
+		item,
+		status,
+		start.Format("15:04:05"),
+		end.Format("15:04:05"),
+		actualSales,
+		expectedSales,
+		priceBefore,
+		priceAfter,
+	)
+
+	ctx := context.Background()
+	_, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:    -4633184325, // твоя группа
+		Text:      msg,
+		ParseMode: "Markdown",
+	})
+	if err != nil {
+		log.Printf("[Telegram] Ошибка при отправке интервал-статы: %v", err)
+	}
+}
