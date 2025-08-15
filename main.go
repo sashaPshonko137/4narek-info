@@ -22,11 +22,6 @@ const (
 	timezone = "Asia/Tashkent"
 )
 
-const (
-	lowerThreshold = 0.7 // дефицит
-	upperThreshold = 1.3 // переизбыток
-)
-
 type PriceAndRatio struct {
 	Prices map[string]int     `json:"prices"`
 	Ratios map[string]float64 `json:"ratios"`
@@ -554,7 +549,16 @@ func adjustPrice(item string) {
 		expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
 		if sales >= 3 && float64(buys) > expectedBuys {
 			if ratio == 0.8 {
-				ratio = 0.7
+				ratio = 0.75
+			}
+		} else if buys < cfg.NormalSales {
+			if ratio == 0.75 {
+				ratio = 0.8
+			} else {
+				newPrice += cfg.PriceStep
+				if newPrice > cfg.MaxPrice {
+					newPrice = cfg.MaxPrice
+				}
 			}
 		}
 } else {
@@ -581,7 +585,7 @@ func adjustPrice(item string) {
 		}
 	} else if buys < cfg.NormalSales {
 		// Запас в порядке — просто повышаем цену или восстанавливаем ratio
-		if ratio == 0.7 {
+		if ratio == 0.75 {
 			ratio = 0.8
 		} else {
 			newPrice += cfg.PriceStep
@@ -600,6 +604,7 @@ func adjustPrice(item string) {
 		cfg.NormalSales,
 		priceBefore,
 		newPrice,
+		ratio,
 	)
 
 	if newPrice != data.Prices[item] || ratio != ratioBefore {
@@ -627,18 +632,6 @@ func adjustPrice(item string) {
 		updateTelegramMessage()
 	}
 }
-
-func dynamicUpperThreshold(normalSales int) float64 {
-	if normalSales <= 1 {
-		return 3.0 // если норма = 1, то до 3 предметов — не перебор
-	} else if normalSales <= 3 {
-		return 2.0
-	} else if normalSales <= 7 {
-		return 1.7
-	}
-	return 1.5 // для больших норм — обычный порог
-}
-
 
 func updateTelegramMessage() {
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
@@ -692,7 +685,7 @@ func updateTelegramMessage() {
 	}
 }
 
-func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales, expectedSales, priceBefore, priceAfter int) {
+func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales, expectedSales, priceBefore, priceAfter int, ratio float64) {
 	status := "✅"
 	if actualSales < expectedSales {
 		status = "⚠️"
@@ -731,7 +724,7 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		expectedSales,
 		priceBefore,
 		priceAfter,
-		data.Ratios[item],
+		ratio,
 		onHand,        // добавлено
 		onlineCount,
 	)
