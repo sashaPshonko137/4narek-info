@@ -170,14 +170,31 @@ var (
 		"poison3": {
 			BasePrice:    3500012,
 			NormalSales:  1,
-			PriceStep:    100012,
+			PriceStep:    100000,
 			AnalysisTime: 13 * time.Minute,
 			MinPrice: 700012,
-			MaxPrice: 7000008,
+			MaxPrice: 7000012,
 			Type: "netherite_sword",
 		},
+		"vampiryzm1": {
+			BasePrice:    3500013,
+			NormalSales:  1,
+			PriceStep:    100000,
+			AnalysisTime: 13 * time.Minute,
+			MinPrice: 700013,
+			MaxPrice: 7000013,
+			Type: "netherite_sword",
+		},
+		"vampiryzm2": {
+			BasePrice:    3500014,
+			NormalSales:  1,
+			PriceStep:    100000,
+			AnalysisTime: 13 * time.Minute,
+			MinPrice: 700014,
+			MaxPrice: 7000014,
+			Type: "netherite_sword",
+	},
 	}
-
 data struct {
 	Prices       map[string]int
 	Ratios       map[string]float64 // 🆕
