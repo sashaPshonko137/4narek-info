@@ -560,7 +560,7 @@ func adjustPrice(item string) {
 		}
 	} else {
 		expectedStock := cfg.NormalSales
-		if currentItemCount > expectedStock {
+		if currentItemCount > int(1.5*math.Sqrt(float64(expectedStock))) {
 			newPrice -= cfg.PriceStep
 			ratio = 0.8
 			if newPrice < cfg.MinPrice {
