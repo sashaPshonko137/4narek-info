@@ -32,7 +32,6 @@ var (
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
 	tgBot *bot.Bot
-	lastPriceUpdateMu sync.Mutex
 )
 
 var (
@@ -64,7 +63,7 @@ type ItemConfig struct {
 type DailyData struct {
 	Date       string             `json:"date"`
 	Prices     map[string]int     `json:"prices"`
-	Ratios     map[string]float64 `json:"ratios"` // 🆕
+	Ratios     map[string]float64 `json:"ratios"`
 	BuyStats   map[string]int     `json:"buy_stats"`
 	SellStats  map[string]int     `json:"sell_stats"`
 	TrySellStats map[string]int
@@ -72,147 +71,23 @@ type DailyData struct {
 }
 
 var (
-	
-itemsConfig = map[string]ItemConfig{
-    "sword5": {
-        BasePrice:    2300001,
-        NormalSales:  12,  // Увеличено с 10, т.к. часто продажи превышают 10
-        PriceStep:    100000,
-        AnalysisTime: 10 * time.Minute,
-        MinPrice:     500001,
-        MaxPrice:     5000001,
-        Type:        "netherite_sword",
-    },
-    "sword6": {
-        BasePrice:    2600002,
-        NormalSales:  2,   // Увеличено с 4, т.к. часто продажи на уровне 4-6
-        PriceStep:    100000,
-        AnalysisTime: 10 * time.Minute,
-        MinPrice:     600002,
-        MaxPrice:     6000002,
-        Type:        "netherite_sword",
-    },
-    "sword7": {
-        BasePrice:    3800003,
-        NormalSales:  10,  // Увеличено с 8, т.к. часто продажи на уровне 8-11
-        PriceStep:    100000,
-        AnalysisTime: 10 * time.Minute,
-        MinPrice:     700003,
-        MaxPrice:     7000003,
-        Type:        "netherite_sword",
-    },
-    "pochti-megasword": {
-        BasePrice:    6000004,  // Поднята базовая цена
-        NormalSales:  2,        // Увеличено с 1
-        PriceStep:    100000,
-        AnalysisTime: 10 * time.Minute,
-        MinPrice:     1000004,
-        MaxPrice:     8000004,
-        Type:        "netherite_sword",
-    },
-    "megasword": {
-        BasePrice:    6200005,  // Поднята базовая цена
-        NormalSales:  2,        // Увеличено с 1
-        PriceStep:    100000,
-        AnalysisTime: 10 * time.Minute,
-        MinPrice:     1200005,
-        MaxPrice:     10000005,
-        Type:        "netherite_sword",
-    },
-    "elytra": {
-        BasePrice:    1300006,  // Поднята базовая цена
-        NormalSales:  11,       // Увеличено с 7
-        PriceStep:    100000,
-        AnalysisTime: 10 * time.Minute,
-        MinPrice:     200006,
-        MaxPrice:     30000006,
-        Type:        "elytra",
-    },
-    "elytra-mend": {
-        BasePrice:    5200007,  // Поднята базовая цена
-        NormalSales:  1,        // Увеличено с 1
-        PriceStep:    100000,
-        AnalysisTime: 20 * time.Minute,
-        MinPrice:     500007,
-        MaxPrice:     8000007,
-        Type:        "elytra",
-    },
-    "elytra-unbreak": {
-        BasePrice:    2300008,  // Поднята базовая цена
-        NormalSales:  5,        // Увеличено с 4
-        PriceStep:    100000,
-        AnalysisTime: 10 * time.Minute,
-        MinPrice:     300008,
-        MaxPrice:     5000008,
-        Type:        "elytra",
-    },
-    "mend": {
-        BasePrice:    4000009,  // Поднята базовая цена
-        NormalSales:  2,        // Увеличено с 1
-        PriceStep:    100000,
-        AnalysisTime: 13 * time.Minute,
-        MinPrice:     700009,
-        MaxPrice:     5500009,
-        Type:        "netherite_sword",
-    },
-    "poison1": {
-        BasePrice:    4100010,  // Поднята базовая цена
-        NormalSales:  2,        // Увеличено с 1
-        PriceStep:    100000,
-        AnalysisTime: 13 * time.Minute,
-        MinPrice:     700010,
-        MaxPrice:     7000010,
-        Type:        "netherite_sword",
-    },
-    "poison2": {
-        BasePrice:    5000011,  // Поднята базовая цена
-        NormalSales:  1,
-        PriceStep:    100000,
-        AnalysisTime: 13 * time.Minute,
-        MinPrice:     700011,
-        MaxPrice:     7000011,
-        Type:        "netherite_sword",
-    },
-    "poison3": {
-        BasePrice:    5200012,  // Поднята базовая цена
-        NormalSales:  1,
-        PriceStep:    100000,
-        AnalysisTime: 13 * time.Minute,
-        MinPrice:     700012,
-        MaxPrice:     7000012,
-        Type:        "netherite_sword",
-    },
-    "vampiryzm1": {
-        BasePrice:    5100013,  // Поднята базовая цена
-        NormalSales:  1,
-        PriceStep:    100000,
-        AnalysisTime: 13 * time.Minute,
-        MinPrice:     700013,
-        MaxPrice:     7000013,
-        Type:        "netherite_sword",
-    },
-    "vampiryzm2": {
-        BasePrice:    5200014,  // Поднята базовая цена
-        NormalSales:  1,
-        PriceStep:    100000,
-        AnalysisTime: 13 * time.Minute,
-        MinPrice:     700014,
-        MaxPrice:     7000014,
-        Type:        "netherite_sword",
-    },
-}
-data struct {
-	Prices       map[string]int
-	Ratios       map[string]float64 // 🆕
-	BuyStats     map[string]int
-	SellStats    map[string]int
-	TrySellStats map[string]int
-	LastTrade    map[string]time.Time
-	TradeHistory map[string][]TradeLog
-}
-
-
-
+	data = struct {
+		Prices       map[string]int
+		Ratios       map[string]float64
+		BuyStats     map[string]int
+		SellStats    map[string]int
+		TrySellStats map[string]int
+		LastTrade    map[string]time.Time
+		TradeHistory map[string][]TradeLog
+	}{
+		Prices:       make(map[string]int),
+		Ratios:       make(map[string]float64),
+		BuyStats:     make(map[string]int),
+		SellStats:    make(map[string]int),
+		TrySellStats: make(map[string]int),
+		LastTrade:    make(map[string]time.Time),
+		TradeHistory: make(map[string][]TradeLog),
+	}
 	dataMu sync.Mutex
 
 	clients   = make(map[*websocket.Conn]bool)
@@ -237,7 +112,140 @@ data struct {
 		"elytra-mend": time.Now(),
 		"elytra-unbreak": time.Now(),
 	}
+	swordTimesMu sync.Mutex
+	lastPriceUpdate = make(map[string]time.Time)
+	lastPriceUpdateMu sync.Mutex
 )
+
+var itemsConfig = map[string]ItemConfig{
+    "sword5": {
+        BasePrice:    2300001,
+        NormalSales:  12,
+        PriceStep:    100000,
+        AnalysisTime: 10 * time.Minute,
+        MinPrice:     500001,
+        MaxPrice:     5000001,
+        Type:        "netherite_sword",
+    },
+    "sword6": {
+        BasePrice:    2600002,
+        NormalSales:  2,
+        PriceStep:    100000,
+        AnalysisTime: 10 * time.Minute,
+        MinPrice:     600002,
+        MaxPrice:     6000002,
+        Type:        "netherite_sword",
+    },
+    "sword7": {
+        BasePrice:    3800003,
+        NormalSales:  10,
+        PriceStep:    100000,
+        AnalysisTime: 10 * time.Minute,
+        MinPrice:     700003,
+        MaxPrice:     7000003,
+        Type:        "netherite_sword",
+    },
+    "pochti-megasword": {
+        BasePrice:    6000004,
+        NormalSales:  2,
+        PriceStep:    100000,
+        AnalysisTime: 10 * time.Minute,
+        MinPrice:     1000004,
+        MaxPrice:     8000004,
+        Type:        "netherite_sword",
+    },
+    "megasword": {
+        BasePrice:    6200005,
+        NormalSales:  2,
+        PriceStep:    100000,
+        AnalysisTime: 10 * time.Minute,
+        MinPrice:     1200005,
+        MaxPrice:     10000005,
+        Type:        "netherite_sword",
+    },
+    "elytra": {
+        BasePrice:    1300006,
+        NormalSales:  11,
+        PriceStep:    100000,
+        AnalysisTime: 10 * time.Minute,
+        MinPrice:     200006,
+        MaxPrice:     30000006,
+        Type:        "elytra",
+    },
+    "elytra-mend": {
+        BasePrice:    5200007,
+        NormalSales:  1,
+        PriceStep:    100000,
+        AnalysisTime: 20 * time.Minute,
+        MinPrice:     500007,
+        MaxPrice:     8000007,
+        Type:        "elytra",
+    },
+    "elytra-unbreak": {
+        BasePrice:    2300008,
+        NormalSales:  5,
+        PriceStep:    100000,
+        AnalysisTime: 10 * time.Minute,
+        MinPrice:     300008,
+        MaxPrice:     5000008,
+        Type:        "elytra",
+    },
+    "mend": {
+        BasePrice:    4000009,
+        NormalSales:  2,
+        PriceStep:    100000,
+        AnalysisTime: 13 * time.Minute,
+        MinPrice:     700009,
+        MaxPrice:     5500009,
+        Type:        "netherite_sword",
+    },
+    "poison1": {
+        BasePrice:    4100010,
+        NormalSales:  2,
+        PriceStep:    100000,
+        AnalysisTime: 13 * time.Minute,
+        MinPrice:     700010,
+        MaxPrice:     7000010,
+        Type:        "netherite_sword",
+    },
+    "poison2": {
+        BasePrice:    5000011,
+        NormalSales:  1,
+        PriceStep:    100000,
+        AnalysisTime: 13 * time.Minute,
+        MinPrice:     700011,
+        MaxPrice:     7000011,
+        Type:        "netherite_sword",
+    },
+    "poison3": {
+        BasePrice:    5200012,
+        NormalSales:  1,
+        PriceStep:    100000,
+        AnalysisTime: 13 * time.Minute,
+        MinPrice:     700012,
+        MaxPrice:     7000012,
+        Type:        "netherite_sword",
+    },
+    "vampiryzm1": {
+        BasePrice:    5100013,
+        NormalSales:  1,
+        PriceStep:    100000,
+        AnalysisTime: 13 * time.Minute,
+        MinPrice:     700013,
+        MaxPrice:     7000013,
+        Type:        "netherite_sword",
+    },
+    "vampiryzm2": {
+        BasePrice:    5200014,
+        NormalSales:  1,
+        PriceStep:    100000,
+        AnalysisTime: 13 * time.Minute,
+        MinPrice:     700014,
+        MaxPrice:     7000014,
+        Type:        "netherite_sword",
+    },
+}
+
 func main() {
 	loc, err := time.LoadLocation(timezone)
 	if err != nil {
@@ -284,25 +292,14 @@ func loadDailyData(loc *time.Location) {
 	filename := fmt.Sprintf("data_%s.json", today)
 
 	// Инициализация данных
-data.Prices = make(map[string]int)
-data.BuyStats = make(map[string]int)
-data.SellStats = make(map[string]int)
-data.LastTrade = make(map[string]time.Time)
-data.TradeHistory = make(map[string][]TradeLog)
-data.Ratios = make(map[string]float64)
-data.TrySellStats = make(map[string]int)
-
-
 	dailyData = DailyData{
 		Date:     today,
 		Prices:   make(map[string]int),
+		Ratios:   make(map[string]float64),
 		BuyStats: make(map[string]int),
 		SellStats: make(map[string]int),
-		Ratios: make(map[string]float64),
 		TrySellStats: make(map[string]int),
 	}
-
-
 
 	// Загрузка из файла, если он существует и за сегодня
 	if file, err := os.ReadFile(filename); err == nil {
@@ -318,21 +315,25 @@ data.TrySellStats = make(map[string]int)
 			for item, count := range dailyData.SellStats {
 				data.SellStats[item] = count
 			}
+			for item, count := range dailyData.TrySellStats {
+				data.TrySellStats[item] = count
+			}
+			for item, ratio := range dailyData.Ratios {
+				data.Ratios[item] = ratio
+			}
 			log.Println("Данные успешно загружены из файла")
 		}
 	}
 
 	// Устанавливаем базовые цены для новых предметов
-for item, cfg := range itemsConfig {
-	if _, exists := data.Prices[item]; !exists {
-		data.Prices[item] = cfg.BasePrice
-		dailyData.Prices[item] = cfg.BasePrice
+	for item, cfg := range itemsConfig {
+		if _, exists := data.Prices[item]; !exists {
+			data.Prices[item] = cfg.BasePrice
+		}
+		if _, exists := data.Ratios[item]; !exists {
+			data.Ratios[item] = 0.8
+		}
 	}
-	if _, exists := data.Ratios[item]; !exists {
-		data.Ratios[item] = 0.8                // 🆕 стартовый коэффициент
-		dailyData.Ratios[item] = 0.8           // 🆕
-	}
-}
 
 	// Создаем/обновляем сообщение в Telegram
 	updateTelegramMessage()
@@ -354,17 +355,37 @@ func checkDayChange(loc *time.Location) {
 }
 
 func saveDailyData() {
+	dataMu.Lock()
+	defer dataMu.Unlock()
+	
 	today := currentDay
 	if today == "" {
 		return
 	}
 
 	filename := fmt.Sprintf("data_%s.json", today)
-	dailyData.Prices = data.Prices
-	dailyData.BuyStats = data.BuyStats
-	dailyData.SellStats = data.SellStats
-	dailyData.Prices = data.Prices
-	dailyData.Ratios = data.Ratios
+	dailyData.Prices = make(map[string]int)
+	dailyData.Ratios = make(map[string]float64)
+	dailyData.BuyStats = make(map[string]int)
+	dailyData.SellStats = make(map[string]int)
+	dailyData.TrySellStats = make(map[string]int)
+	
+	// Копируем данные для сохранения
+	for k, v := range data.Prices {
+		dailyData.Prices[k] = v
+	}
+	for k, v := range data.Ratios {
+		dailyData.Ratios[k] = v
+	}
+	for k, v := range data.BuyStats {
+		dailyData.BuyStats[k] = v
+	}
+	for k, v := range data.SellStats {
+		dailyData.SellStats[k] = v
+	}
+	for k, v := range data.TrySellStats {
+		dailyData.TrySellStats[k] = v
+	}
 
 	file, err := json.MarshalIndent(dailyData, "", "  ")
 	if err != nil {
@@ -392,6 +413,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 	clientItemsMu.Lock()
 	clientItems[ws] = make(map[string]int)
+	clientInventory[ws] = make(map[string]int)
 	clientItemsMu.Unlock()
 
 	defer func() {
@@ -401,16 +423,26 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 		clientItemsMu.Lock()
 		delete(clientItems, ws)
+		delete(clientInventory, ws)
 		clientItemsMu.Unlock()
 	}()
 
 	// Отправляем текущие цены при подключении
 	dataMu.Lock()
-	ws.WriteJSON(PriceAndRatio{
-	Prices: data.Prices,
-	Ratios: data.Ratios,
-})
+	pricesCopy := make(map[string]int)
+	ratiosCopy := make(map[string]float64)
+	for k, v := range data.Prices {
+		pricesCopy[k] = v
+	}
+	for k, v := range data.Ratios {
+		ratiosCopy[k] = v
+	}
 	dataMu.Unlock()
+	
+	ws.WriteJSON(PriceAndRatio{
+		Prices: pricesCopy,
+		Ratios: ratiosCopy,
+	})
 
 	for {
 		// Читаем сырые данные
@@ -424,17 +456,20 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[WS incoming] %s", string(rawMsg))
 
 		// Парсим JSON в структуру
-var msg struct {
-	Action string            `json:"action"`
-	Type   string            `json:"type"`   // для buy/sell
-	Items  map[string]int    `json:"items"`  // для presence
-	Inventory map[string]int `json:"inventory"`
-}
+		var msg struct {
+			Action string            `json:"action"`
+			Type   string            `json:"type"`   // для buy/sell
+			Items  map[string]int    `json:"items"`  // для presence
+			Inventory map[string]int `json:"inventory"`
+		}
 
 		if err := json.Unmarshal(rawMsg, &msg); err != nil {
 			log.Printf("json unmarshal error: %v", err)
 			continue
 		}
+
+		var shouldUpdateTelegram bool
+		var shouldSaveDailyData bool
 
 		dataMu.Lock()
 		switch msg.Action {
@@ -442,45 +477,64 @@ var msg struct {
 			data.BuyStats[msg.Type]++
 			data.LastTrade[msg.Type] = time.Now()
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "buy"})
-			updateTelegramMessage()
-
-	
+			shouldUpdateTelegram = true
+			shouldSaveDailyData = true
 		case "sell":
 			data.SellStats[msg.Type]++
 			data.LastTrade[msg.Type] = time.Now()
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "sell"})
 			adjustPrice(msg.Type)
+			shouldUpdateTelegram = true
+			shouldSaveDailyData = true
 		case "try-sell":
 			data.TrySellStats[msg.Type]++
 			data.LastTrade[msg.Type] = time.Now()
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{
-			Time: time.Now(), Type: "try-sell",
-		})
-		updateTelegramMessage()
-
+				Time: time.Now(), Type: "try-sell",
+			})
+			shouldUpdateTelegram = true
+			shouldSaveDailyData = true
 		case "info":
+			pricesCopy := make(map[string]int)
+			ratiosCopy := make(map[string]float64)
+			for k, v := range data.Prices {
+				pricesCopy[k] = v
+			}
+			for k, v := range data.Ratios {
+				ratiosCopy[k] = v
+			}
+			dataMu.Unlock()
+			
 			ws.WriteJSON(PriceAndRatio{
-			Prices: data.Prices,
-			Ratios: data.Ratios,
-	})
-case "presence":
-	clientItemsMu.Lock()
-	clientItems[ws] = make(map[string]int)
-	for item, count := range msg.Items {
-		if count > 0 {
-			clientItems[ws][item] = count
+				Prices: pricesCopy,
+				Ratios: ratiosCopy,
+			})
+			
+			continue // Пропускаем остальной код, так как мы уже разблокировали dataMu
+		case "presence":
+			clientItemsMu.Lock()
+			clientItems[ws] = make(map[string]int)
+			clientInventory[ws] = make(map[string]int)
+			for item, count := range msg.Items {
+				if count > 0 {
+					clientItems[ws][item] = count
+				}
+			}
+			for item, count := range msg.Inventory {
+				if count > 0 {
+					clientInventory[ws][item] = count
+				}
+			}
+			clientItemsMu.Unlock()
 		}
-	}
-	for item, count := range msg.Inventory {
-		if count > 0 {
-			clientInventory[ws][item] = count
-		}
-	}
-	clientItemsMu.Unlock()
-
-		}
-		saveDailyData()
 		dataMu.Unlock()
+
+		if shouldUpdateTelegram {
+			updateTelegramMessage()
+		}
+		if shouldSaveDailyData {
+			saveDailyData()
+		}
 	}
 }
 
@@ -513,8 +567,6 @@ type TradeLog struct {
 	Time  time.Time
 	Type  string // "buy" или "sell"
 }
-
-var swordTimesMu sync.Mutex
 
 func countRecentSales(item string, since time.Time) int {
 	count := 0
@@ -552,15 +604,15 @@ func getInventoryFreeSlots(itemType string) int {
 	clientItemsMu.Lock()
 	defer clientItemsMu.Unlock()
 
-	count := 0
+	total := 0
 	for _, items := range clientInventory {
 		for t, c := range items {
 			if itemsConfig[t].Type == itemType {
-				count += c
+				total += c
 			}
 		}
 	}
-	return inventoryLimit[itemType]
+	return inventoryLimit[itemType] - total
 }
 
 func countRecentBuys(item string, since time.Time) int {
@@ -573,8 +625,15 @@ func countRecentBuys(item string, since time.Time) int {
 	return count
 }
 
-
-var lastPriceUpdate = make(map[string]time.Time)
+func countRecentTrySells(item string, since time.Time) int {
+	count := 0
+	for _, trade := range data.TradeHistory[item] {
+		if trade.Type == "try-sell" && trade.Time.After(since) {
+			count++
+		}
+	}
+	return count
+}
 
 func adjustPrice(item string) {
 	cfg, ok := itemsConfig[item]
@@ -597,12 +656,11 @@ func adjustPrice(item string) {
 		lastUpdate = now.Add(-cfg.AnalysisTime)
 	}
 
-	// Сбор данных под одним локом
+	// Сбор данных
 	dataMu.Lock()
 	sales := countRecentSales(item, lastUpdate)
 	buys := countRecentBuys(item, lastUpdate)
-	newPrice := data.Prices[item]
-	priceBefore := newPrice
+	priceBefore := data.Prices[item]
 	ratioBefore := data.Ratios[item]
 	ratio := ratioBefore
 	dataMu.Unlock()
@@ -627,25 +685,10 @@ func adjustPrice(item string) {
 		allocatedSlots = 1
 	}
 
-	// Собираем данные о наличии предметов без повторных вызовов
-	var (
-		totalTypeItems     int
-		currentItemCount   int
-		totalInventory     int
-		inventoryFreeSlots int
-	)
-
+	// Собираем данные о наличии предметов
+	currentItemCount := getItemCount(item)
+	totalInventory := 0
 	clientItemsMu.Lock()
-	for _, items := range clientItems {
-		for name, count := range items {
-			if itemsConfig[name].Type == cfg.Type {
-				totalTypeItems += count
-			}
-			if name == item {
-				currentItemCount += count
-			}
-		}
-	}
 	for _, inv := range clientInventory {
 		for name, count := range inv {
 			if itemsConfig[name].Type == cfg.Type {
@@ -655,10 +698,11 @@ func adjustPrice(item string) {
 	}
 	clientItemsMu.Unlock()
 
-	inventoryFreeSlots = inventoryLimit[cfg.Type] - totalInventory
-	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
+	inventoryFreeSlots := inventoryLimit[cfg.Type] - totalInventory
+	freeSlots := maxSlots - (totalInventory - currentItemCount)
 
 	// === Логика изменения цены ===
+	newPrice := priceBefore
 	if sales >= cfg.NormalSales {
 		expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
 		if sales >= 3 && float64(buys) > expectedBuys {
@@ -707,7 +751,7 @@ func adjustPrice(item string) {
 		}
 	}
 
-	// === Обновление и рассылка ===
+	// === Обновление данных ===
 	if newPrice != priceBefore || ratio != ratioBefore {
 		dataMu.Lock()
 		data.Prices[item] = newPrice
@@ -719,11 +763,24 @@ func adjustPrice(item string) {
 		lastPriceUpdateMu.Unlock()
 		dataMu.Unlock()
 
+		// Рассылаем обновления
 		clientsMu.Lock()
+		pricesCopy := make(map[string]int)
+		ratiosCopy := make(map[string]float64)
+		
+		dataMu.Lock()
+		for k, v := range data.Prices {
+			pricesCopy[k] = v
+		}
+		for k, v := range data.Ratios {
+			ratiosCopy[k] = v
+		}
+		dataMu.Unlock()
+		
 		for client := range clients {
 			_ = client.WriteJSON(PriceAndRatio{
-				Prices: data.Prices,
-				Ratios: data.Ratios,
+				Prices: pricesCopy,
+				Ratios: ratiosCopy,
 			})
 		}
 		clientsMu.Unlock()
@@ -740,11 +797,30 @@ func adjustPrice(item string) {
 		priceBefore,
 		newPrice,
 		ratio,
+		totalInventory,
 	)
 }
 
-
 func updateTelegramMessage() {
+	// Сначала копируем данные под блокировкой
+	dataMu.Lock()
+	pricesCopy := make(map[string]int)
+	buyStatsCopy := make(map[string]int)
+	sellStatsCopy := make(map[string]int)
+	
+	for k, v := range data.Prices {
+		pricesCopy[k] = v
+	}
+	for k, v := range data.BuyStats {
+		buyStatsCopy[k] = v
+	}
+	for k, v := range data.SellStats {
+		sellStatsCopy[k] = v
+	}
+	
+	messageID := dailyData.MessageID
+	dataMu.Unlock()
+
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
 
 	msgText := fmt.Sprintf("📊 Статистика за %s\nПоследнее обновление: %s\n\n", dailyData.Date, currentTime)
@@ -753,15 +829,15 @@ func updateTelegramMessage() {
 		msgText += fmt.Sprintf(
 			"🔹 %s: %d ₽\n🛒 Куплено: %d\n💰 Продано: %d\n\n",
 			item,
-			data.Prices[item],
-			data.BuyStats[item],
-			data.SellStats[item],
+			pricesCopy[item],
+			buyStatsCopy[item],
+			sellStatsCopy[item],
 		)
 	}
 
 	ctx := context.Background()
 
-	if dailyData.MessageID == 0 {
+	if messageID == 0 {
 		msg, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: chatID,
 			Text:   msgText,
@@ -770,12 +846,13 @@ func updateTelegramMessage() {
 			log.Printf("[Telegram error] Не удалось отправить новое сообщение: %v", err)
 			return
 		}
+		dataMu.Lock()
 		dailyData.MessageID = msg.ID
-		saveDailyData()
+		dataMu.Unlock()
 	} else {
 		_, err := tgBot.EditMessageText(ctx, &bot.EditMessageTextParams{
 			ChatID:    chatID,
-			MessageID: dailyData.MessageID,
+			MessageID: messageID,
 			Text:      msgText,
 		})
 		if err != nil {
@@ -787,8 +864,9 @@ func updateTelegramMessage() {
 				Text:   msgText,
 			})
 			if sendErr == nil {
+				dataMu.Lock()
 				dailyData.MessageID = msg.ID
-				saveDailyData()
+				dataMu.Unlock()
 			} else {
 				log.Printf("[Telegram error] Повторная отправка тоже не удалась: %v", sendErr)
 			}
@@ -796,7 +874,7 @@ func updateTelegramMessage() {
 	}
 }
 
-func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales, expectedSales, priceBefore, priceAfter int, ratio float64) {
+func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales, expectedSales, priceBefore, priceAfter int, ratio float64, inv int) {
 	status := "✅"
 	if actualSales < expectedSales {
 		status = "⚠️"
@@ -807,11 +885,13 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 
 	// 2. Подсчитываем покупки за интервал
 	buyCount := 0
+	dataMu.Lock()
 	for _, trade := range data.TradeHistory[item] {
 		if trade.Type == "buy" && trade.Time.After(start) && trade.Time.Before(end) {
 			buyCount++
 		}
 	}
+	dataMu.Unlock()
 
 	// 3. Получаем количество предметов на руках у клиентов
 	onHand := getItemCount(item)
@@ -825,6 +905,7 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 			"💸 Цена: %d → %d\n"+
 			"🧮 Коэффициент: %.2f\n"+
 			"🎒 На ah: %d\n"+
+			"🎒 В инвентаре: %d\n"+
 			"👥 Онлайн: %d игроков",
 		item,
 		status,
@@ -836,7 +917,8 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		priceBefore,
 		priceAfter,
 		ratio,
-		onHand,        // добавлено
+		onHand,
+		inv,
 		onlineCount,
 	)
 
@@ -863,15 +945,12 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		expectedSales,
 		priceBefore,
 		priceAfter,
-		onHand,        // добавлено
+		onHand,
 		onlineCount,
 	)
 
 	appendToFile("logs_interval.txt", plainLog)
 }
-
-
-
 
 func appendToFile(filename, content string) {
 	f, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -910,14 +989,4 @@ func getOnlineCount() int {
 	}
 
 	return status.PlayersOnline
-}
-
-func countRecentTrySells(item string, since time.Time) int {
-	count := 0
-	for _, trade := range data.TradeHistory[item] {
-		if trade.Type == "try-sell" && trade.Time.After(since) {
-			count++
-		}
-	}
-	return count
 }
