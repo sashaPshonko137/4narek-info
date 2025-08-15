@@ -95,15 +95,15 @@ var (
 			MaxPrice: 7000003,
 			Type: "netherite_sword",
 		},
-		"pochti-megasword": {
-			BasePrice:    3500004,
-			NormalSales:  1,
-			PriceStep:    100000,
-			AnalysisTime: 10 * time.Minute,
-			MinPrice: 1000004,
-			MaxPrice: 8000004,
-			Type: "netherite_sword",
-		},
+		// "pochti-megasword": {
+		// 	BasePrice:    3500004,
+		// 	NormalSales:  1,
+		// 	PriceStep:    100000,
+		// 	AnalysisTime: 10 * time.Minute,
+		// 	MinPrice: 1000004,
+		// 	MaxPrice: 8000004,
+		// 	Type: "netherite_sword",
+		// },
 		"megasword": {
 			BasePrice:    5000005,
 			NormalSales:  1,
@@ -209,7 +209,7 @@ data struct {
 		"vampiryzm1": time.Now(),
 		"vampiryzm2": time.Now(),
 		"vampiryzm3": time.Now(),
-		"pochti-megasword": time.Now(),
+		// "pochti-megasword": time.Now(),
 		"megasword": time.Now(),
 		"elytra": time.Now(),
 		"elytra-mend": time.Now(),
@@ -465,7 +465,7 @@ func fixPrice() {
 			adjustPrice("sword5")
 			adjustPrice("sword6")
 			adjustPrice("sword7")
-			adjustPrice("pochti-megasword")
+			// adjustPrice("pochti-megasword")
 			adjustPrice("elytra")
 			adjustPrice("elytra-mend")
 			adjustPrice("elytra-unbreak")
