@@ -541,9 +541,6 @@ func adjustPrice(item string) {
 
 	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
 
-	if freeSlots < allocatedSlots {
-		return
-	}
 
 	if sales >= cfg.NormalSales {
 		expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
@@ -562,6 +559,9 @@ func adjustPrice(item string) {
 			}
 		}
 } else {
+	if freeSlots < allocatedSlots {
+		return
+	}
 	// Продаж меньше нормы, значит спрос слабый
 	// Нужно понять: в наличии просто чуть-чуть или слишком много?
 
