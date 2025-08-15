@@ -597,14 +597,17 @@ func adjustPrice(item string) {
 		lastUpdate = now.Add(-cfg.AnalysisTime)
 	}
 
+	// Сбор данных под одним локом
+	dataMu.Lock()
 	sales := countRecentSales(item, lastUpdate)
 	buys := countRecentBuys(item, lastUpdate)
-	// trySells := countRecentTrySells(item, lastUpdate)
 	newPrice := data.Prices[item]
 	priceBefore := newPrice
 	ratioBefore := data.Ratios[item]
 	ratio := ratioBefore
+	dataMu.Unlock()
 
+	// Считаем слот-лимиты
 	salesRate := float64(cfg.NormalSales) / cfg.AnalysisTime.Minutes()
 	totalSalesRate := 0.0
 
@@ -613,97 +616,120 @@ func adjustPrice(item string) {
 			totalSalesRate += float64(otherCfg.NormalSales) / otherCfg.AnalysisTime.Minutes()
 		}
 	}
-
 	if totalSalesRate == 0 {
 		totalSalesRate = 1
 	}
 	itemShare := salesRate / totalSalesRate
 
-	maxSlots, ok := itemLimit[cfg.Type]
-	if !ok {
-		maxSlots = 1
-	}
-
+	maxSlots := itemLimit[cfg.Type]
 	allocatedSlots := int(math.Round(itemShare * float64(maxSlots)))
 	if allocatedSlots < 1 {
 		allocatedSlots = 1
 	}
 
-	totalTypeItems := 0
-	currentItemCount := 0
+	// Собираем данные о наличии предметов без повторных вызовов
+	var (
+		totalTypeItems     int
+		currentItemCount   int
+		totalInventory     int
+		inventoryFreeSlots int
+	)
 
 	clientItemsMu.Lock()
 	for _, items := range clientItems {
-		for itemName, count := range items {
-			if itemsConfig[itemName].Type == cfg.Type {
+		for name, count := range items {
+			if itemsConfig[name].Type == cfg.Type {
 				totalTypeItems += count
-				if itemName == item {
-					currentItemCount += count
-				}
+			}
+			if name == item {
+				currentItemCount += count
+			}
+		}
+	}
+	for _, inv := range clientInventory {
+		for name, count := range inv {
+			if itemsConfig[name].Type == cfg.Type {
+				totalInventory += count
 			}
 		}
 	}
 	clientItemsMu.Unlock()
 
+	inventoryFreeSlots = inventoryLimit[cfg.Type] - totalInventory
 	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
 
+	// === Логика изменения цены ===
 	if sales >= cfg.NormalSales {
 		expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
 		if sales >= 3 && float64(buys) > expectedBuys {
 			if ratio == 0.8 {
 				ratio = 0.75
 			}
-		} else if buys < cfg.NormalSales && getInventoryFreeSlots(cfg.Type) > cfg.NormalSales {
+		} else if buys < cfg.NormalSales && inventoryFreeSlots > cfg.NormalSales {
 			if ratio == 0.75 {
 				ratio = 0.8
 			} else {
 				if freeSlots < allocatedSlots {
 					return
-	        	}
+				}
 				newPrice += cfg.PriceStep
 				if newPrice > cfg.MaxPrice {
 					newPrice = cfg.MaxPrice
 				}
 			}
 		}
-} else {
-
-	// Продаж меньше нормы, значит спрос слабый
-	// Нужно понять: в наличии просто чуть-чуть или слишком много?
-
-	// Сколько предметов считается «допустимо» в наличии
-	allowedStock := cfg.NormalSales
-
-	// Добавляем запас, если предмет редкий
-	switch {
-	case cfg.NormalSales <= 1:
-		allowedStock += 2
-	case cfg.NormalSales <= 3:
-		allowedStock += 1
-	}
-
-	if currentItemCount > allowedStock {
-		// Явное превышение — спрос слабый и предметов много
-		newPrice -= cfg.PriceStep
-		ratio = 0.8
-		if newPrice < cfg.MinPrice {
-			newPrice = cfg.MinPrice
+	} else {
+		allowedStock := cfg.NormalSales
+		if cfg.NormalSales <= 1 {
+			allowedStock += 2
+		} else if cfg.NormalSales <= 3 {
+			allowedStock += 1
 		}
-	} else if (getInventoryCount(item) < int(float64(cfg.NormalSales)*1.5) && getInventoryFreeSlots(cfg.Type) > cfg.NormalSales) {
+
+		if currentItemCount > allowedStock {
+			newPrice -= cfg.PriceStep
+			ratio = 0.8
+			if newPrice < cfg.MinPrice {
+				newPrice = cfg.MinPrice
+			}
+		} else if inventoryFreeSlots > cfg.NormalSales {
 			if freeSlots < allocatedSlots && !(buys < cfg.NormalSales) {
 				return
-	        }
-		// Запас в порядке — просто повышаем цену или восстанавливаем ratio
-		if ratio == 0.75 {
-			ratio = 0.8
-		} else {
-			newPrice += cfg.PriceStep
-			if newPrice > cfg.MaxPrice {
-				newPrice = cfg.MaxPrice
+			}
+			if ratio == 0.75 {
+				ratio = 0.8
+			} else {
+				newPrice += cfg.PriceStep
+				if newPrice > cfg.MaxPrice {
+					newPrice = cfg.MaxPrice
+				}
 			}
 		}
 	}
-}
+
+	// === Обновление и рассылка ===
+	if newPrice != priceBefore || ratio != ratioBefore {
+		dataMu.Lock()
+		data.Prices[item] = newPrice
+		dailyData.Prices[item] = newPrice
+		data.Ratios[item] = ratio
+		dailyData.Ratios[item] = ratio
+		lastPriceUpdateMu.Lock()
+		lastPriceUpdate[item] = now
+		lastPriceUpdateMu.Unlock()
+		dataMu.Unlock()
+
+		clientsMu.Lock()
+		for client := range clients {
+			_ = client.WriteJSON(PriceAndRatio{
+				Prices: data.Prices,
+				Ratios: data.Ratios,
+			})
+		}
+		clientsMu.Unlock()
+
+		updateTelegramMessage()
+	}
 
 	sendIntervalStatsToTelegram(
 		item,
@@ -715,32 +741,8 @@ func adjustPrice(item string) {
 		newPrice,
 		ratio,
 	)
-
-	if newPrice != data.Prices[item] || ratio != ratioBefore {
-		data.Prices[item] = newPrice
-		dailyData.Prices[item] = newPrice
-		data.Ratios[item] = ratio
-		dailyData.Ratios[item] = ratio
-		
-		lastPriceUpdateMu.Lock()
-		lastPriceUpdate[item] = now
-		lastPriceUpdateMu.Unlock()
-
-		clientsMu.Lock()
-		for client := range clients {
-			err := client.WriteJSON(PriceAndRatio{
-				Prices: data.Prices,
-				Ratios: data.Ratios,
-			})
-			if err != nil {
-				log.Printf("write error: %v", err)
-			}
-		}
-		clientsMu.Unlock()
-
-		updateTelegramMessage()
-	}
 }
+
 
 func updateTelegramMessage() {
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
