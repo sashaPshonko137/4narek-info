@@ -225,7 +225,6 @@ data struct {
 		"poison3": time.Now(),
 		"vampiryzm1": time.Now(),
 		"vampiryzm2": time.Now(),
-		"vampiryzm3": time.Now(),
 		// "pochti-megasword": time.Now(),
 		"megasword": time.Now(),
 		"elytra": time.Now(),
