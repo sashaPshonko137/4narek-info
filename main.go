@@ -69,7 +69,7 @@ var (
 	
 	itemsConfig = map[string]ItemConfig{
 		"sword5": {
-			BasePrice:    2100001,
+			BasePrice:    2300001,
 			NormalSales:  10,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -78,7 +78,7 @@ var (
 			Type: "netherite_sword",
 		},
 		"sword6": {
-			BasePrice:    2500002,
+			BasePrice:    2600002,
 			NormalSales:  4,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -87,7 +87,7 @@ var (
 			Type: "netherite_sword",
 		},
 		"sword7": {
-			BasePrice:    3500003,
+			BasePrice:    3800003,
 			NormalSales:  8,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -105,7 +105,7 @@ var (
 		// 	Type: "netherite_sword",
 		// },
 		"megasword": {
-			BasePrice:    5000005,
+			BasePrice:    5200005,
 			NormalSales:  1,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -114,7 +114,7 @@ var (
 			Type: "netherite_sword",
 		},
 		"elytra": {
-			BasePrice:    1200006,
+			BasePrice:    1400006,
 			NormalSales:  7,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -123,7 +123,7 @@ var (
 			Type: "elytra",
 		},
 		"elytra-mend": {
-			BasePrice:    4500007,
+			BasePrice:    4400007,
 			NormalSales:  1,
 			PriceStep:    100000,
 			AnalysisTime: 15 * time.Minute,
@@ -132,7 +132,7 @@ var (
 			Type: "elytra",
 		},
 		"elytra-unbreak": {
-			BasePrice:    1700008,
+			BasePrice:    2100008,
 			NormalSales:  4,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -150,7 +150,7 @@ var (
 			Type: "netherite_sword",
 		},
 		"poison1": {
-			BasePrice:    3500010,
+			BasePrice:    3800010,
 			NormalSales:  1,
 			PriceStep:    100000,
 			AnalysisTime: 13 * time.Minute,
@@ -159,7 +159,7 @@ var (
 			Type: "netherite_sword",
 		},
 		"poison2": {
-			BasePrice:    3500011,
+			BasePrice:    3700011,
 			NormalSales:  1,
 			PriceStep:    100000,
 			AnalysisTime: 13 * time.Minute,
@@ -168,7 +168,7 @@ var (
 			Type: "netherite_sword",
 		},
 		"poison3": {
-			BasePrice:    3500012,
+			BasePrice:    3800012,
 			NormalSales:  1,
 			PriceStep:    100000,
 			AnalysisTime: 13 * time.Minute,
@@ -177,7 +177,7 @@ var (
 			Type: "netherite_sword",
 		},
 		"vampiryzm1": {
-			BasePrice:    3500013,
+			BasePrice:    3800013,
 			NormalSales:  1,
 			PriceStep:    100000,
 			AnalysisTime: 13 * time.Minute,
@@ -186,7 +186,7 @@ var (
 			Type: "netherite_sword",
 		},
 		"vampiryzm2": {
-			BasePrice:    3500014,
+			BasePrice:    3800014,
 			NormalSales:  1,
 			PriceStep:    100000,
 			AnalysisTime: 13 * time.Minute,
