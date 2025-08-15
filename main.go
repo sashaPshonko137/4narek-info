@@ -37,12 +37,18 @@ var (
 
 var (
 	clientItems   = make(map[*websocket.Conn]map[string]int)
+	clientInventory = make(map[*websocket.Conn]map[string]int)
 	clientItemsMu sync.Mutex
 )
 
 var itemLimit = map[string]int{
 	"netherite_sword": 140,
 	"elytra": 24,
+}
+
+var inventoryLimit = map[string]int{
+	"netherite_sword": 36*3*6,
+	"elytra": 36*3,
 }
 
 type ItemConfig struct {
@@ -422,6 +428,7 @@ var msg struct {
 	Action string            `json:"action"`
 	Type   string            `json:"type"`   // для buy/sell
 	Items  map[string]int    `json:"items"`  // для presence
+	Inventory map[string]int `json:"inventory"`
 }
 
 		if err := json.Unmarshal(rawMsg, &msg); err != nil {
@@ -462,6 +469,11 @@ case "presence":
 	for item, count := range msg.Items {
 		if count > 0 {
 			clientItems[ws][item] = count
+		}
+	}
+	for item, count := range msg.Inventory {
+		if count > 0 {
+			clientInventory[ws][item] = count
 		}
 	}
 	clientItemsMu.Unlock()
@@ -523,6 +535,32 @@ func getItemCount(item string) int {
 		count += items[item]
 	}
 	return count
+}
+
+func getInventoryCount(item string) int {
+	clientItemsMu.Lock()
+	defer clientItemsMu.Unlock()
+
+	count := 0
+	for _, items := range clientInventory {
+		count += items[item]
+	}
+	return count
+}
+
+func getInventoryFreeSlots(itemType string) int {
+	clientItemsMu.Lock()
+	defer clientItemsMu.Unlock()
+
+	count := 0
+	for _, items := range clientInventory {
+		for t, c := range items {
+			if itemsConfig[t].Type == itemType {
+				count += c
+			}
+		}
+	}
+	return inventoryLimit[itemType]
 }
 
 func countRecentBuys(item string, since time.Time) int {
@@ -609,14 +647,13 @@ func adjustPrice(item string) {
 
 	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
 
-
 	if sales >= cfg.NormalSales {
 		expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
 		if sales >= 3 && float64(buys) > expectedBuys {
 			if ratio == 0.8 {
 				ratio = 0.75
 			}
-		} else if buys < cfg.NormalSales {
+		} else if buys < cfg.NormalSales && getInventoryFreeSlots(cfg.Type) > cfg.NormalSales {
 			if ratio == 0.75 {
 				ratio = 0.8
 			} else {
@@ -652,8 +689,8 @@ func adjustPrice(item string) {
 		if newPrice < cfg.MinPrice {
 			newPrice = cfg.MinPrice
 		}
-	} else if buys < cfg.NormalSales {
-			if freeSlots < allocatedSlots {
+	} else if (getInventoryCount(item) < int(float64(cfg.NormalSales)*1.5) && getInventoryFreeSlots(cfg.Type) > cfg.NormalSales) {
+			if freeSlots < allocatedSlots && !(buys < cfg.NormalSales) {
 				return
 	        }
 		// Запас в порядке — просто повышаем цену или восстанавливаем ratio
