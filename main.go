@@ -140,7 +140,42 @@ var (
 			MaxPrice: 5000008,
 			Type: "elytra",
 		},
-
+		"mend": {
+			BasePrice:    3500009,
+			NormalSales:  1,
+			PriceStep:    100000,
+			AnalysisTime: 13 * time.Minute,
+			MinPrice: 700009,
+			MaxPrice: 5500009,
+			Type: "netherite_sword",
+		},
+		"poison1": {
+			BasePrice:    3500010,
+			NormalSales:  1,
+			PriceStep:    100000,
+			AnalysisTime: 13 * time.Minute,
+			MinPrice: 700010,
+			MaxPrice: 7000010,
+			Type: "netherite_sword",
+		},
+		"poison2": {
+			BasePrice:    3500011,
+			NormalSales:  1,
+			PriceStep:    100000,
+			AnalysisTime: 13 * time.Minute,
+			MinPrice: 700011,
+			MaxPrice: 7000011,
+			Type: "netherite_sword",
+		},
+		"poison3": {
+			BasePrice:    3500012,
+			NormalSales:  1,
+			PriceStep:    100012,
+			AnalysisTime: 13 * time.Minute,
+			MinPrice: 700012,
+			MaxPrice: 7000008,
+			Type: "netherite_sword",
+		},
 	}
 
 data struct {
@@ -167,6 +202,13 @@ data struct {
 		"sword5": time.Now(),
 		"sword6": time.Now(),
 		"sword7": time.Now(),
+		"mend": time.Now(),
+		"poison1": time.Now(),
+		"poison2": time.Now(),
+		"poison3": time.Now(),
+		"vampiryzm1": time.Now(),
+		"vampiryzm2": time.Now(),
+		"vampiryzm3": time.Now(),
 		"pochti-megasword": time.Now(),
 		"megasword": time.Now(),
 		"elytra": time.Now(),
@@ -174,8 +216,6 @@ data struct {
 		"elytra-unbreak": time.Now(),
 	}
 )
-
-
 func main() {
 	loc, err := time.LoadLocation(timezone)
 	if err != nil {
@@ -430,6 +470,12 @@ func fixPrice() {
 			adjustPrice("elytra-mend")
 			adjustPrice("elytra-unbreak")
 			adjustPrice("megasword")
+			adjustPrice("mend")
+			adjustPrice("poison1")
+			adjustPrice("poison2")
+			adjustPrice("poison3")
+			adjustPrice("vampiryzm1")
+			adjustPrice("vampiryzm2")
 		}
         time.Sleep(1 * time.Minute)
     }
