@@ -620,6 +620,9 @@ func adjustPrice(item string) {
 			if ratio == 0.75 {
 				ratio = 0.8
 			} else {
+				if freeSlots < allocatedSlots {
+					return
+	        	}
 				newPrice += cfg.PriceStep
 				if newPrice > cfg.MaxPrice {
 					newPrice = cfg.MaxPrice
