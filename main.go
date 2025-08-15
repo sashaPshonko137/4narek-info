@@ -55,23 +55,13 @@ type ItemConfig struct {
 	Type         string
 }
 
-var itemStockNorms = map[string]int{
-    "sword5":  72,
-    "sword6":  63,
-    "sword7":  65,
-    "pochti-megasword": 50,
-    "megasword": 50,
-    "elytra":  12,
-    "elytra-mend": 4,
-    "elytra-unbreak": 9,
-}
-
 type DailyData struct {
 	Date       string             `json:"date"`
 	Prices     map[string]int     `json:"prices"`
 	Ratios     map[string]float64 `json:"ratios"` // 🆕
 	BuyStats   map[string]int     `json:"buy_stats"`
 	SellStats  map[string]int     `json:"sell_stats"`
+	TrySellStats map[string]int
 	MessageID  int                `json:"message_id"`
 }
 
@@ -158,9 +148,12 @@ data struct {
 	Ratios       map[string]float64 // 🆕
 	BuyStats     map[string]int
 	SellStats    map[string]int
+	TrySellStats map[string]int
 	LastTrade    map[string]time.Time
 	TradeHistory map[string][]TradeLog
 }
+
+
 
 	dataMu sync.Mutex
 
@@ -235,6 +228,7 @@ data.SellStats = make(map[string]int)
 data.LastTrade = make(map[string]time.Time)
 data.TradeHistory = make(map[string][]TradeLog)
 data.Ratios = make(map[string]float64)
+data.TrySellStats = make(map[string]int)
 
 
 	dailyData = DailyData{
@@ -243,7 +237,10 @@ data.Ratios = make(map[string]float64)
 		BuyStats: make(map[string]int),
 		SellStats: make(map[string]int),
 		Ratios: make(map[string]float64),
+		TrySellStats: make(map[string]int),
 	}
+
+
 
 	// Загрузка из файла, если он существует и за сегодня
 	if file, err := os.ReadFile(filename); err == nil {
@@ -390,10 +387,18 @@ var msg struct {
 			data.LastTrade[msg.Type] = time.Now()
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "sell"})
 			adjustPrice(msg.Type)
+		case "try-sell":
+			data.TrySellStats[msg.Type]++
+			data.LastTrade[msg.Type] = time.Now()
+			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{
+			Time: time.Now(), Type: "try-sell",
+		})
+		updateTelegramMessage()
+
 		case "info":
 			ws.WriteJSON(PriceAndRatio{
-		Prices: data.Prices,
-		Ratios: data.Ratios,
+			Prices: data.Prices,
+			Ratios: data.Ratios,
 	})
 case "presence":
 	clientItemsMu.Lock()
@@ -494,6 +499,7 @@ func adjustPrice(item string) {
 
 	sales := countRecentSales(item, lastUpdate)
 	buys := countRecentBuys(item, lastUpdate)
+	// trySells := countRecentTrySells(item, lastUpdate)
 	newPrice := data.Prices[item]
 	priceBefore := newPrice
 	ratioBefore := data.Ratios[item]
@@ -559,9 +565,7 @@ func adjustPrice(item string) {
 			}
 		}
 } else {
-	if freeSlots < allocatedSlots {
-		return
-	}
+
 	// Продаж меньше нормы, значит спрос слабый
 	// Нужно понять: в наличии просто чуть-чуть или слишком много?
 
@@ -584,6 +588,9 @@ func adjustPrice(item string) {
 			newPrice = cfg.MinPrice
 		}
 	} else if buys < cfg.NormalSales {
+			if freeSlots < allocatedSlots {
+				return
+	        }
 		// Запас в порядке — просто повышаем цену или восстанавливаем ratio
 		if ratio == 0.75 {
 			ratio = 0.8
@@ -799,4 +806,14 @@ func getOnlineCount() int {
 	}
 
 	return status.PlayersOnline
+}
+
+func countRecentTrySells(item string, since time.Time) int {
+	count := 0
+	for _, trade := range data.TradeHistory[item] {
+		if trade.Type == "try-sell" && trade.Time.After(since) {
+			count++
+		}
+	}
+	return count
 }
