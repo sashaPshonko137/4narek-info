@@ -73,134 +73,134 @@ type DailyData struct {
 
 var (
 	
-	itemsConfig = map[string]ItemConfig{
-		"sword5": {
-			BasePrice:    2300001,
-			NormalSales:  10,
-			PriceStep:    100000,
-			AnalysisTime: 10 * time.Minute,
-			MinPrice: 500001,
-			MaxPrice: 5000001,
-			Type: "netherite_sword",
-		},
-		"sword6": {
-			BasePrice:    2600002,
-			NormalSales:  4,
-			PriceStep:    100000,
-			AnalysisTime: 10 * time.Minute,
-			MinPrice: 600002,
-			MaxPrice: 6000002,
-			Type: "netherite_sword",
-		},
-		"sword7": {
-			BasePrice:    3800003,
-			NormalSales:  8,
-			PriceStep:    100000,
-			AnalysisTime: 10 * time.Minute,
-			MinPrice: 700003,
-			MaxPrice: 7000003,
-			Type: "netherite_sword",
-		},
-		// "pochti-megasword": {
-		// 	BasePrice:    3500004,
-		// 	NormalSales:  1,
-		// 	PriceStep:    100000,
-		// 	AnalysisTime: 10 * time.Minute,
-		// 	MinPrice: 1000004,
-		// 	MaxPrice: 8000004,
-		// 	Type: "netherite_sword",
-		// },
-		"megasword": {
-			BasePrice:    5200005,
-			NormalSales:  1,
-			PriceStep:    100000,
-			AnalysisTime: 10 * time.Minute,
-			MinPrice: 1200005,
-			MaxPrice: 10000005,
-			Type: "netherite_sword",
-		},
-		"elytra": {
-			BasePrice:    1400006,
-			NormalSales:  7,
-			PriceStep:    100000,
-			AnalysisTime: 10 * time.Minute,
-			MinPrice: 200006,
-			MaxPrice: 30000006,
-			Type: "elytra",
-		},
-		"elytra-mend": {
-			BasePrice:    4400007,
-			NormalSales:  1,
-			PriceStep:    100000,
-			AnalysisTime: 15 * time.Minute,
-			MinPrice: 500007,
-			MaxPrice: 8000007,
-			Type: "elytra",
-		},
-		"elytra-unbreak": {
-			BasePrice:    2100008,
-			NormalSales:  4,
-			PriceStep:    100000,
-			AnalysisTime: 10 * time.Minute,
-			MinPrice: 300008,
-			MaxPrice: 5000008,
-			Type: "elytra",
-		},
-		"mend": {
-			BasePrice:    3500009,
-			NormalSales:  1,
-			PriceStep:    100000,
-			AnalysisTime: 13 * time.Minute,
-			MinPrice: 700009,
-			MaxPrice: 5500009,
-			Type: "netherite_sword",
-		},
-		"poison1": {
-			BasePrice:    3800010,
-			NormalSales:  1,
-			PriceStep:    100000,
-			AnalysisTime: 13 * time.Minute,
-			MinPrice: 700010,
-			MaxPrice: 7000010,
-			Type: "netherite_sword",
-		},
-		"poison2": {
-			BasePrice:    3700011,
-			NormalSales:  1,
-			PriceStep:    100000,
-			AnalysisTime: 13 * time.Minute,
-			MinPrice: 700011,
-			MaxPrice: 7000011,
-			Type: "netherite_sword",
-		},
-		"poison3": {
-			BasePrice:    3800012,
-			NormalSales:  1,
-			PriceStep:    100000,
-			AnalysisTime: 13 * time.Minute,
-			MinPrice: 700012,
-			MaxPrice: 7000012,
-			Type: "netherite_sword",
-		},
-		"vampiryzm1": {
-			BasePrice:    3800013,
-			NormalSales:  1,
-			PriceStep:    100000,
-			AnalysisTime: 13 * time.Minute,
-			MinPrice: 700013,
-			MaxPrice: 7000013,
-			Type: "netherite_sword",
-		},
-		"vampiryzm2": {
-			BasePrice:    3800014,
-			NormalSales:  1,
-			PriceStep:    100000,
-			AnalysisTime: 13 * time.Minute,
-			MinPrice: 700014,
-			MaxPrice: 7000014,
-			Type: "netherite_sword",
-	},
-	}
+itemsConfig = map[string]ItemConfig{
+    "sword5": {
+        BasePrice:    2300001,
+        NormalSales:  12,  // Увеличено с 10, т.к. часто продажи превышают 10
+        PriceStep:    100000,
+        AnalysisTime: 10 * time.Minute,
+        MinPrice:     500001,
+        MaxPrice:     5000001,
+        Type:        "netherite_sword",
+    },
+    "sword6": {
+        BasePrice:    2600002,
+        NormalSales:  2,   // Увеличено с 4, т.к. часто продажи на уровне 4-6
+        PriceStep:    100000,
+        AnalysisTime: 10 * time.Minute,
+        MinPrice:     600002,
+        MaxPrice:     6000002,
+        Type:        "netherite_sword",
+    },
+    "sword7": {
+        BasePrice:    3800003,
+        NormalSales:  10,  // Увеличено с 8, т.к. часто продажи на уровне 8-11
+        PriceStep:    100000,
+        AnalysisTime: 10 * time.Minute,
+        MinPrice:     700003,
+        MaxPrice:     7000003,
+        Type:        "netherite_sword",
+    },
+    "pochti-megasword": {
+        BasePrice:    6000004,  // Поднята базовая цена
+        NormalSales:  2,        // Увеличено с 1
+        PriceStep:    100000,
+        AnalysisTime: 10 * time.Minute,
+        MinPrice:     1000004,
+        MaxPrice:     8000004,
+        Type:        "netherite_sword",
+    },
+    "megasword": {
+        BasePrice:    6200005,  // Поднята базовая цена
+        NormalSales:  2,        // Увеличено с 1
+        PriceStep:    100000,
+        AnalysisTime: 10 * time.Minute,
+        MinPrice:     1200005,
+        MaxPrice:     10000005,
+        Type:        "netherite_sword",
+    },
+    "elytra": {
+        BasePrice:    1300006,  // Поднята базовая цена
+        NormalSales:  11,       // Увеличено с 7
+        PriceStep:    100000,
+        AnalysisTime: 10 * time.Minute,
+        MinPrice:     200006,
+        MaxPrice:     30000006,
+        Type:        "elytra",
+    },
+    "elytra-mend": {
+        BasePrice:    5200007,  // Поднята базовая цена
+        NormalSales:  1,        // Увеличено с 1
+        PriceStep:    100000,
+        AnalysisTime: 20 * time.Minute,
+        MinPrice:     500007,
+        MaxPrice:     8000007,
+        Type:        "elytra",
+    },
+    "elytra-unbreak": {
+        BasePrice:    2300008,  // Поднята базовая цена
+        NormalSales:  5,        // Увеличено с 4
+        PriceStep:    100000,
+        AnalysisTime: 10 * time.Minute,
+        MinPrice:     300008,
+        MaxPrice:     5000008,
+        Type:        "elytra",
+    },
+    "mend": {
+        BasePrice:    4000009,  // Поднята базовая цена
+        NormalSales:  2,        // Увеличено с 1
+        PriceStep:    100000,
+        AnalysisTime: 13 * time.Minute,
+        MinPrice:     700009,
+        MaxPrice:     5500009,
+        Type:        "netherite_sword",
+    },
+    "poison1": {
+        BasePrice:    4100010,  // Поднята базовая цена
+        NormalSales:  2,        // Увеличено с 1
+        PriceStep:    100000,
+        AnalysisTime: 13 * time.Minute,
+        MinPrice:     700010,
+        MaxPrice:     7000010,
+        Type:        "netherite_sword",
+    },
+    "poison2": {
+        BasePrice:    5000011,  // Поднята базовая цена
+        NormalSales:  1,
+        PriceStep:    100000,
+        AnalysisTime: 13 * time.Minute,
+        MinPrice:     700011,
+        MaxPrice:     7000011,
+        Type:        "netherite_sword",
+    },
+    "poison3": {
+        BasePrice:    5200012,  // Поднята базовая цена
+        NormalSales:  1,
+        PriceStep:    100000,
+        AnalysisTime: 13 * time.Minute,
+        MinPrice:     700012,
+        MaxPrice:     7000012,
+        Type:        "netherite_sword",
+    },
+    "vampiryzm1": {
+        BasePrice:    5100013,  // Поднята базовая цена
+        NormalSales:  1,
+        PriceStep:    100000,
+        AnalysisTime: 13 * time.Minute,
+        MinPrice:     700013,
+        MaxPrice:     7000013,
+        Type:        "netherite_sword",
+    },
+    "vampiryzm2": {
+        BasePrice:    5200014,  // Поднята базовая цена
+        NormalSales:  1,
+        PriceStep:    100000,
+        AnalysisTime: 13 * time.Minute,
+        MinPrice:     700014,
+        MaxPrice:     7000014,
+        Type:        "netherite_sword",
+    },
+}
 data struct {
 	Prices       map[string]int
 	Ratios       map[string]float64 // 🆕
@@ -231,7 +231,7 @@ data struct {
 		"poison3": time.Now(),
 		"vampiryzm1": time.Now(),
 		"vampiryzm2": time.Now(),
-		// "pochti-megasword": time.Now(),
+		"pochti-megasword": time.Now(),
 		"megasword": time.Now(),
 		"elytra": time.Now(),
 		"elytra-mend": time.Now(),
@@ -493,7 +493,7 @@ func fixPrice() {
 			adjustPrice("sword5")
 			adjustPrice("sword6")
 			adjustPrice("sword7")
-			// adjustPrice("pochti-megasword")
+			adjustPrice("pochti-megasword")
 			adjustPrice("elytra")
 			adjustPrice("elytra-mend")
 			adjustPrice("elytra-unbreak")
