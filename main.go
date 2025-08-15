@@ -22,6 +22,11 @@ const (
 	timezone = "Asia/Tashkent"
 )
 
+const (
+	lowerThreshold = 0.7 // дефицит
+	upperThreshold = 1.3 // переизбыток
+)
+
 type PriceAndRatio struct {
 	Prices map[string]int     `json:"prices"`
 	Ratios map[string]float64 `json:"ratios"`
@@ -558,25 +563,40 @@ func adjustPrice(item string) {
 				}
 			}
 		}
+} else {
+	// Продаж меньше нормы, значит спрос слабый
+	// Нужно понять: в наличии просто чуть-чуть или слишком много?
+
+	// Сколько предметов считается «допустимо» в наличии
+	allowedStock := cfg.NormalSales
+
+	// Добавляем запас, если предмет редкий
+	switch {
+	case cfg.NormalSales <= 1:
+		allowedStock += 2
+	case cfg.NormalSales <= 3:
+		allowedStock += 1
+	}
+
+	if currentItemCount > allowedStock {
+		// Явное превышение — спрос слабый и предметов много
+		newPrice -= cfg.PriceStep
+		ratio = 0.8
+		if newPrice < cfg.MinPrice {
+			newPrice = cfg.MinPrice
+		}
 	} else {
-		expectedStock := cfg.NormalSales
-		if currentItemCount > int(1.5*math.Sqrt(float64(expectedStock))) {
-			newPrice -= cfg.PriceStep
+		// Запас в порядке — просто повышаем цену или восстанавливаем ratio
+		if ratio == 0.7 {
 			ratio = 0.8
-			if newPrice < cfg.MinPrice {
-				newPrice = cfg.MinPrice
-			}
 		} else {
-			if ratio == 0.7 {
-				ratio = 0.8
-			} else {
-				newPrice += cfg.PriceStep
-				if newPrice > cfg.MaxPrice {
-					newPrice = cfg.MaxPrice
-				}
+			newPrice += cfg.PriceStep
+			if newPrice > cfg.MaxPrice {
+				newPrice = cfg.MaxPrice
 			}
 		}
 	}
+}
 
 	sendIntervalStatsToTelegram(
 		item,
@@ -612,6 +632,17 @@ func adjustPrice(item string) {
 
 		updateTelegramMessage()
 	}
+}
+
+func dynamicUpperThreshold(normalSales int) float64 {
+	if normalSales <= 1 {
+		return 3.0 // если норма = 1, то до 3 предметов — не перебор
+	} else if normalSales <= 3 {
+		return 2.0
+	} else if normalSales <= 7 {
+		return 1.7
+	}
+	return 1.5 // для больших норм — обычный порог
 }
 
 
