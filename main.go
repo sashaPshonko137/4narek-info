@@ -555,12 +555,6 @@ func adjustPrice(item string) {
 		if sales >= 3 && float64(buys) > expectedBuys {
 			if ratio == 0.8 {
 				ratio = 0.7
-			} else {
-				newPrice -= cfg.PriceStep
-				ratio = 0.8
-				if newPrice < cfg.MinPrice {
-					newPrice = cfg.MinPrice
-				}
 			}
 		}
 } else {
@@ -585,7 +579,7 @@ func adjustPrice(item string) {
 		if newPrice < cfg.MinPrice {
 			newPrice = cfg.MinPrice
 		}
-	} else {
+	} else if buys < cfg.NormalSales {
 		// Запас в порядке — просто повышаем цену или восстанавливаем ratio
 		if ratio == 0.7 {
 			ratio = 0.8
