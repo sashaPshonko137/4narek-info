@@ -37,7 +37,6 @@ var (
 var (
 	clientItems     = make(map[*websocket.Conn]map[string]int)
 	clientInventory = make(map[*websocket.Conn]map[string]int)
-	clientItemsMu   sync.RWMutex
 )
 
 var itemLimit = map[string]int{
@@ -218,19 +217,16 @@ type Data struct {
 
 var (
 	data   = &Data{}
-	dataMu sync.RWMutex
+	mutex  = sync.Mutex{} // Единственный мьютекс для всей системы
 
-	clients   = make(map[*websocket.Conn]bool)
-	clientsMu sync.RWMutex
+	clients = make(map[*websocket.Conn]bool)
 
 	currentDay string
 	dailyData  DailyData
 
-	swordTimes   = make(map[string]time.Time)
-	swordTimesMu sync.RWMutex
+	swordTimes = make(map[string]time.Time)
 
-	lastPriceUpdate   = make(map[string]time.Time)
-	lastPriceUpdateMu sync.RWMutex
+	lastPriceUpdate = make(map[string]time.Time)
 )
 
 func main() {
@@ -260,6 +256,7 @@ func main() {
 	// Загрузка данных за сегодня
 	loadDailyData(loc)
 	updateTelegramMessageSimple()
+
 	// WebSocket сервер
 	http.HandleFunc("/ws", handleConnections)
 	go func() {
@@ -276,14 +273,14 @@ func main() {
 }
 
 func getConnectedClientsCount() int {
-	clientsMu.RLock()
-	defer clientsMu.RUnlock()
+	mutex.Lock()
+	defer mutex.Unlock()
 	return len(clients)
 }
 
 func loadDailyData(loc *time.Location) {
-	dataMu.Lock()
-	defer dataMu.Unlock()
+	mutex.Lock()
+	defer mutex.Unlock()
 
 	today := time.Now().In(loc).Format("2006-01-02")
 	currentDay = today
@@ -335,17 +332,16 @@ func loadDailyData(loc *time.Location) {
 	}
 
 	// Инициализация времени последнего обновления
-	swordTimesMu.Lock()
 	for item := range itemsConfig {
 		swordTimes[item] = time.Now()
 	}
-	swordTimesMu.Unlock()
 
 	// Сохраняем данные
 	saveDailyDataNoMessageUpdate()
 }
+
 func saveDailyDataNoMessageUpdate() {
-	// Эта функция вызывается с уже заблокированным dataMu
+	// Эта функция вызывается с уже заблокированным mutex
 	today := currentDay
 	if today == "" {
 		return
@@ -369,6 +365,7 @@ func saveDailyDataNoMessageUpdate() {
 		return
 	}
 }
+
 func updateTelegramMessageWithoutLocks(prices, buyStats, sellStats map[string]int, date string, messageID int) {
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
 
@@ -422,23 +419,22 @@ func updateTelegramMessageWithoutLocks(prices, buyStats, sellStats map[string]in
 
 	// Обновляем messageID если он изменился
 	if newMessageID != 0 {
-		dataMu.Lock()
+		mutex.Lock()
 		dailyData.MessageID = newMessageID
 		saveDailyDataNoMessageUpdate()
-		dataMu.Unlock()
+		mutex.Unlock()
 	}
 }
 
-// Новая функция без сохранения данных
 func updateTelegramMessageSimple() {
-	dataMu.RLock()
+	mutex.Lock()
 	// Создаем копии данных для использования вне блокировки
 	prices := make(map[string]int)
 	buyStats := make(map[string]int)
 	sellStats := make(map[string]int)
 	date := dailyData.Date
 	messageID := dailyData.MessageID
-	
+
 	for k, v := range data.Prices {
 		prices[k] = v
 	}
@@ -448,38 +444,10 @@ func updateTelegramMessageSimple() {
 	for k, v := range data.SellStats {
 		sellStats[k] = v
 	}
-	dataMu.RUnlock()
-	
+	mutex.Unlock()
+
 	// Обновляем Telegram сообщение
 	updateTelegramMessageWithoutLocks(prices, buyStats, sellStats, date, messageID)
-}
-
-
-// Новая функция сохранения без обновления Telegram
-func saveDailyDataNoUpdate() {
-	// Эта функция вызывается уже с заблокированным dataMu
-	today := currentDay
-	if today == "" {
-		return
-	}
-
-	filename := fmt.Sprintf("data_%s.json", today)
-	dailyData.Prices = data.Prices
-	dailyData.BuyStats = data.BuyStats
-	dailyData.SellStats = data.SellStats
-	dailyData.TrySellStats = data.TrySellStats
-	dailyData.Ratios = data.Ratios
-
-	file, err := json.MarshalIndent(dailyData, "", "  ")
-	if err != nil {
-		log.Printf("Ошибка сохранения данных: %v", err)
-		return
-	}
-
-	if err := os.WriteFile(filename, file, 0644); err != nil {
-		log.Printf("Ошибка записи файла: %v", err)
-		return
-	}
 }
 
 func checkDayChange(loc *time.Location) {
@@ -490,18 +458,16 @@ func checkDayChange(loc *time.Location) {
 		time.Sleep(time.Until(nextDay))
 
 		// Новый день - сохраняем данные и создаем новое сообщение
-		dataMu.Lock()
+		mutex.Lock()
 		saveDailyData()
-		dataMu.Unlock()
-		
+		mutex.Unlock()
+
 		loadDailyData(loc) // Перезагружаем данные для нового дня
 	}
 }
 
 func saveDailyData() {
-	dataMu.RLock()
-	defer dataMu.RUnlock()
-	
+	// Эта функция вызывается с уже заблокированным mutex
 	today := currentDay
 	if today == "" {
 		return
@@ -534,33 +500,30 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
-	clientsMu.Lock()
+	mutex.Lock()
 	clients[ws] = true
-	clientsMu.Unlock()
+	mutex.Unlock()
 
-	clientItemsMu.Lock()
+	mutex.Lock()
 	clientItems[ws] = make(map[string]int)
 	clientInventory[ws] = make(map[string]int)
-	clientItemsMu.Unlock()
+	mutex.Unlock()
 
 	defer func() {
-		clientsMu.Lock()
+		mutex.Lock()
 		delete(clients, ws)
-		clientsMu.Unlock()
-
-		clientItemsMu.Lock()
 		delete(clientItems, ws)
 		delete(clientInventory, ws)
-		clientItemsMu.Unlock()
+		mutex.Unlock()
 	}()
 
 	// Отправляем текущие цены при подключении
-	dataMu.RLock()
+	mutex.Lock()
 	err = ws.WriteJSON(PriceAndRatio{
 		Prices: data.Prices,
 		Ratios: data.Ratios,
 	})
-	dataMu.RUnlock()
+	mutex.Unlock()
 	if err != nil {
 		log.Printf("write error: %v", err)
 		return
@@ -579,10 +542,10 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 		// Парсим JSON в структуру
 		var msg struct {
-			Action    string            `json:"action"`
-			Type      string            `json:"type"`   // для buy/sell
-			Items     map[string]int    `json:"items"`  // для presence
-			Inventory map[string]int    `json:"inventory"`
+			Action    string         `json:"action"`
+			Type      string         `json:"type"`   // для buy/sell
+			Items     map[string]int `json:"items"`  // для presence
+			Inventory map[string]int `json:"inventory"`
 		}
 
 		if err := json.Unmarshal(rawMsg, &msg); err != nil {
@@ -590,50 +553,46 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		mutex.Lock()
 		switch msg.Action {
 		case "buy":
-			dataMu.Lock()
 			data.BuyStats[msg.Type]++
 			data.LastTrade[msg.Type] = time.Now()
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "buy"})
-			dataMu.Unlock()
+			mutex.Unlock()
 			updateTelegramMessage()
 
 		case "sell":
-			dataMu.Lock()
 			data.SellStats[msg.Type]++
 			data.LastTrade[msg.Type] = time.Now()
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "sell"})
-			dataMu.Unlock()
+			mutex.Unlock()
 			adjustPrice(msg.Type)
 
 		case "try-sell":
-			dataMu.Lock()
 			data.TrySellStats[msg.Type]++
 			data.LastTrade[msg.Type] = time.Now()
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{
 				Time: time.Now(), Type: "try-sell",
 			})
-			dataMu.Unlock()
+			mutex.Unlock()
 			updateTelegramMessage()
 
 		case "info":
-			dataMu.RLock()
 			err = ws.WriteJSON(PriceAndRatio{
 				Prices: data.Prices,
 				Ratios: data.Ratios,
 			})
-			dataMu.RUnlock()
+			mutex.Unlock()
 			if err != nil {
 				log.Printf("write error: %v", err)
 				return
 			}
 
 		case "presence":
-			clientItemsMu.Lock()
 			clientItems[ws] = make(map[string]int)
 			clientInventory[ws] = make(map[string]int)
-			
+
 			for item, count := range msg.Items {
 				if count > 0 {
 					clientItems[ws][item] = count
@@ -644,12 +603,15 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 					clientInventory[ws][item] = count
 				}
 			}
-			clientItemsMu.Unlock()
+			mutex.Unlock()
+
+		default:
+			mutex.Unlock()
 		}
-		
-		dataMu.Lock()
+
+		mutex.Lock()
 		saveDailyData()
-		dataMu.Unlock()
+		mutex.Unlock()
 	}
 }
 
@@ -673,9 +635,7 @@ func fixPrice() {
 }
 
 func countRecentSales(item string, since time.Time) int {
-	dataMu.RLock()
-	defer dataMu.RUnlock()
-	
+	// Эта функция вызывается с уже заблокированным mutex
 	count := 0
 	for _, trade := range data.TradeHistory[item] {
 		if trade.Type == "sell" && trade.Time.After(since) {
@@ -686,9 +646,7 @@ func countRecentSales(item string, since time.Time) int {
 }
 
 func getItemCount(item string) int {
-	clientItemsMu.RLock()
-	defer clientItemsMu.RUnlock()
-
+	// Эта функция вызывается с уже заблокированным mutex
 	count := 0
 	for _, items := range clientItems {
 		count += items[item]
@@ -697,9 +655,7 @@ func getItemCount(item string) int {
 }
 
 func getInventoryCount(item string) int {
-	clientItemsMu.RLock()
-	defer clientItemsMu.RUnlock()
-
+	// Эта функция вызывается с уже заблокированным mutex
 	count := 0
 	for _, items := range clientInventory {
 		count += items[item]
@@ -708,9 +664,7 @@ func getInventoryCount(item string) int {
 }
 
 func getInventoryFreeSlots(itemType string) int {
-	clientItemsMu.RLock()
-	defer clientItemsMu.RUnlock()
-
+	// Эта функция вызывается с уже заблокированным mutex
 	count := 0
 	for _, items := range clientInventory {
 		for t, c := range items {
@@ -723,9 +677,7 @@ func getInventoryFreeSlots(itemType string) int {
 }
 
 func countRecentBuys(item string, since time.Time) int {
-	dataMu.RLock()
-	defer dataMu.RUnlock()
-	
+	// Эта функция вызывается с уже заблокированным mutex
 	count := 0
 	for _, trade := range data.TradeHistory[item] {
 		if trade.Type == "buy" && trade.Time.After(since) {
@@ -736,9 +688,7 @@ func countRecentBuys(item string, since time.Time) int {
 }
 
 func countRecentTrySells(item string, since time.Time) int {
-	dataMu.RLock()
-	defer dataMu.RUnlock()
-	
+	// Эта функция вызывается с уже заблокированным mutex
 	count := 0
 	for _, trade := range data.TradeHistory[item] {
 		if trade.Type == "try-sell" && trade.Time.After(since) {
@@ -754,28 +704,25 @@ func adjustPrice(item string) {
 		return
 	}
 
+	mutex.Lock()
 	now := time.Now()
 
-	swordTimesMu.Lock()
 	lastUpdate, updatedBefore := swordTimes[item]
 	if updatedBefore && now.Sub(lastUpdate) < cfg.AnalysisTime {
-		swordTimesMu.Unlock()
+		mutex.Unlock()
 		return
 	}
 	swordTimes[item] = now
-	swordTimesMu.Unlock()
 
 	if !updatedBefore {
 		lastUpdate = now.Add(-cfg.AnalysisTime)
 	}
 
-	dataMu.RLock()
 	sales := countRecentSales(item, lastUpdate)
 	buys := countRecentBuys(item, lastUpdate)
 	newPrice := data.Prices[item]
 	priceBefore := newPrice
 	ratioBefore := data.Ratios[item]
-	dataMu.RUnlock()
 
 	salesRate := float64(cfg.NormalSales) / cfg.AnalysisTime.Minutes()
 	totalSalesRate := 0.0
@@ -802,7 +749,6 @@ func adjustPrice(item string) {
 		totalInventory   int
 	)
 
-	clientItemsMu.RLock()
 	for _, items := range clientItems {
 		for name, count := range items {
 			if itemsConfig[name].Type == cfg.Type {
@@ -820,7 +766,6 @@ func adjustPrice(item string) {
 			}
 		}
 	}
-	clientItemsMu.RUnlock()
 
 	inventoryFreeSlots := inventoryLimit[cfg.Type] - totalInventory
 	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
@@ -837,6 +782,7 @@ func adjustPrice(item string) {
 				ratio = 0.8
 			} else {
 				if freeSlots < allocatedSlots {
+					mutex.Unlock()
 					return
 				}
 				newPrice += cfg.PriceStep
@@ -861,6 +807,7 @@ func adjustPrice(item string) {
 			}
 		} else if inventoryFreeSlots > cfg.NormalSales {
 			if freeSlots < allocatedSlots && !(buys < cfg.NormalSales) {
+				mutex.Unlock()
 				return
 			}
 			if ratio == 0.75 {
@@ -875,31 +822,33 @@ func adjustPrice(item string) {
 	}
 
 	if newPrice != priceBefore || ratio != ratioBefore {
-		dataMu.Lock()
 		data.Prices[item] = newPrice
 		dailyData.Prices[item] = newPrice
 		data.Ratios[item] = ratio
 		dailyData.Ratios[item] = ratio
-		lastPriceUpdateMu.Lock()
 		lastPriceUpdate[item] = now
-		lastPriceUpdateMu.Unlock()
-		dataMu.Unlock()
+		mutex.Unlock()
 
 		// Отправляем обновленные данные всем клиентам
-		dataMu.RLock()
+		mutex.Lock()
 		priceData := PriceAndRatio{
 			Prices: data.Prices,
 			Ratios: data.Ratios,
 		}
-		dataMu.RUnlock()
-
-		clientsMu.RLock()
+		// Создаем копию clients для использования вне блокировки
+		clientsCopy := make([]*websocket.Conn, 0, len(clients))
 		for client := range clients {
+			clientsCopy = append(clientsCopy, client)
+		}
+		mutex.Unlock()
+
+		for _, client := range clientsCopy {
 			_ = client.WriteJSON(priceData)
 		}
-		clientsMu.RUnlock()
 
 		updateTelegramMessage()
+	} else {
+		mutex.Unlock()
 	}
 }
 
@@ -908,26 +857,20 @@ func startStatsSender() {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		dataMu.RLock()
+		mutex.Lock()
 		now := time.Now()
 
 		for item, cfg := range itemsConfig {
-			swordTimesMu.RLock()
 			lastUpdate, ok := swordTimes[item]
-			swordTimesMu.RUnlock()
-			
 			if !ok {
 				continue
 			}
 
 			sales := countRecentSales(item, lastUpdate)
-			dataMu.RUnlock()
-			
-			dataMu.RLock()
 			price := data.Prices[item]
 			ratio := data.Ratios[item]
-			dataMu.RUnlock()
 
+			mutex.Unlock()
 			sendIntervalStatsToTelegram(
 				item,
 				lastUpdate,
@@ -938,69 +881,14 @@ func startStatsSender() {
 				price,
 				ratio,
 			)
+			mutex.Lock()
 		}
-		dataMu.RUnlock()
+		mutex.Unlock()
 	}
 }
 
 func updateTelegramMessage() {
 	updateTelegramMessageSimple()
-}
-
-func updateTelegramMessageWithStats(prices, buyStats, sellStats map[string]int, date string, messageID int) {
-	currentTime := time.Now().Format("2006-01-02 15:04:05")
-
-	msgText := fmt.Sprintf("📊 Статистика за %s\nПоследнее обновление: %s\n\n", date, currentTime)
-
-	for item := range itemsConfig {
-		msgText += fmt.Sprintf(
-			"🔹 %s: %d ₽\n🛒 Куплено: %d\n💰 Продано: %d\n\n",
-			item,
-			prices[item],
-			buyStats[item],
-			sellStats[item],
-		)
-	}
-
-	ctx := context.Background()
-
-	if messageID == 0 {
-		msg, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: chatID,
-			Text:   msgText,
-		})
-		if err != nil {
-			log.Printf("[Telegram error] Не удалось отправить новое сообщение: %v", err)
-			return
-		}
-		dataMu.Lock()
-		dailyData.MessageID = msg.ID
-		saveDailyData()
-		dataMu.Unlock()
-	} else {
-		_, err := tgBot.EditMessageText(ctx, &bot.EditMessageTextParams{
-			ChatID:    chatID,
-			MessageID: messageID,
-			Text:      msgText,
-		})
-		if err != nil {
-			log.Printf("[Telegram error] Не удалось обновить сообщение: %v", err)
-
-			// Попробуем отправить заново, если редактирование не удалось (например, сообщение удалено)
-			msg, sendErr := tgBot.SendMessage(ctx, &bot.SendMessageParams{
-				ChatID: chatID,
-				Text:   msgText,
-			})
-			if sendErr == nil {
-				dataMu.Lock()
-				dailyData.MessageID = msg.ID
-				saveDailyData()
-				dataMu.Unlock()
-			} else {
-				log.Printf("[Telegram error] Повторная отправка тоже не удалась: %v", sendErr)
-			}
-		}
-	}
 }
 
 func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales, expectedSales, priceBefore, priceAfter int, ratio float64) {
@@ -1013,17 +901,19 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 	onlineCount := getOnlineCount()
 
 	// 2. Подсчитываем покупки за интервал
-	dataMu.RLock()
+	mutex.Lock()
 	buyCount := 0
 	for _, trade := range data.TradeHistory[item] {
 		if trade.Type == "buy" && trade.Time.After(start) && trade.Time.Before(end) {
 			buyCount++
 		}
 	}
-	dataMu.RUnlock()
+	mutex.Unlock()
 
 	// 3. Получаем количество предметов на руках у клиентов
+	mutex.Lock()
 	onHand := getItemCount(item)
+	mutex.Unlock()
 
 	// 4. Формируем сообщение
 	msg := fmt.Sprintf(
