@@ -125,15 +125,6 @@ var (
 			MaxPrice:     30000006,
 			Type:         "elytra",
 		},
-		"elytra-mend": {
-			BasePrice:    5200007,
-			NormalSales:  1,
-			PriceStep:    100000,
-			AnalysisTime: 20 * time.Minute,
-			MinPrice:     500007,
-			MaxPrice:     8000007,
-			Type:         "elytra",
-		},
 		"elytra-unbreak": {
 			BasePrice:    2300008,
 			NormalSales:  5,
@@ -142,15 +133,6 @@ var (
 			MinPrice:     300008,
 			MaxPrice:     5000008,
 			Type:         "elytra",
-		},
-		"mend": {
-			BasePrice:    4000009,
-			NormalSales:  2,
-			PriceStep:    100000,
-			AnalysisTime: 13 * time.Minute,
-			MinPrice:     700009,
-			MaxPrice:     5500009,
-			Type:         "netherite_sword",
 		},
 	}
 )
@@ -578,7 +560,7 @@ func fixPrice() {
 			log.Println("fixing all prices ", time.Now().Format("15:04:05"))
 			items := []string{
 				"sword5", "sword6", "sword7", "pochti-megasword", "elytra",
-				"elytra-mend", "elytra-unbreak", "megasword",
+                "elytra-unbreak", "megasword",
 			}
 			for _, item := range items {
 				adjustPrice(item)
