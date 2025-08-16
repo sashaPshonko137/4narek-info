@@ -259,6 +259,7 @@ func main() {
 
 	// Загрузка данных за сегодня
 	loadDailyData(loc)
+	updateTelegramMessageSimple()
 	// WebSocket сервер
 	http.HandleFunc("/ws", handleConnections)
 	go func() {
@@ -282,6 +283,7 @@ func getConnectedClientsCount() int {
 
 func loadDailyData(loc *time.Location) {
 	dataMu.Lock()
+	defer dataMu.Unlock()
 
 	today := time.Now().In(loc).Format("2006-01-02")
 	currentDay = today
@@ -339,33 +341,35 @@ func loadDailyData(loc *time.Location) {
 	}
 	swordTimesMu.Unlock()
 
-	// Создаем копии данных для Telegram сообщения ДО разблокировки
-	prices := make(map[string]int)
-	buyStats := make(map[string]int)
-	sellStats := make(map[string]int)
-	for k, v := range data.Prices {
-		prices[k] = v
-	}
-	for k, v := range data.BuyStats {
-		buyStats[k] = v
-	}
-	for k, v := range data.SellStats {
-		sellStats[k] = v
-	}
-	
-	messageID := dailyData.MessageID
-	date := dailyData.Date
-	
-	// Разблокируем мьютекс перед вызовом Telegram функции
-	dataMu.Unlock()
-	
-	// Обновляем Telegram сообщение с уже скопированными данными
-	// НЕ вызываем saveDailyData внутри этой функции
-	updateTelegramMessageWithStatsNoSave(prices, buyStats, sellStats, date, messageID)
+	// Сохраняем данные
+	saveDailyDataNoMessageUpdate()
 }
+func saveDailyDataNoMessageUpdate() {
+	// Эта функция вызывается с уже заблокированным dataMu
+	today := currentDay
+	if today == "" {
+		return
+	}
 
-// Новая функция без сохранения данных
-func updateTelegramMessageWithStatsNoSave(prices, buyStats, sellStats map[string]int, date string, messageID int) {
+	filename := fmt.Sprintf("data_%s.json", today)
+	dailyData.Prices = data.Prices
+	dailyData.BuyStats = data.BuyStats
+	dailyData.SellStats = data.SellStats
+	dailyData.TrySellStats = data.TrySellStats
+	dailyData.Ratios = data.Ratios
+
+	file, err := json.MarshalIndent(dailyData, "", "  ")
+	if err != nil {
+		log.Printf("Ошибка сохранения данных: %v", err)
+		return
+	}
+
+	if err := os.WriteFile(filename, file, 0644); err != nil {
+		log.Printf("Ошибка записи файла: %v", err)
+		return
+	}
+}
+func updateTelegramMessageWithoutLocks(prices, buyStats, sellStats map[string]int, date string, messageID int) {
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
 
 	msgText := fmt.Sprintf("📊 Статистика за %s\nПоследнее обновление: %s\n\n", date, currentTime)
@@ -402,7 +406,7 @@ func updateTelegramMessageWithStatsNoSave(prices, buyStats, sellStats map[string
 		if err != nil {
 			log.Printf("[Telegram error] Не удалось обновить сообщение: %v", err)
 
-			// Попробуем отправить заново, если редактирование не удалось (например, сообщение удалено)
+			// Попробуем отправить заново, если редактирование не удалось
 			msg, sendErr := tgBot.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: chatID,
 				Text:   msgText,
@@ -420,11 +424,36 @@ func updateTelegramMessageWithStatsNoSave(prices, buyStats, sellStats map[string
 	if newMessageID != 0 {
 		dataMu.Lock()
 		dailyData.MessageID = newMessageID
-		// Сохраняем данные отдельно, без вызова updateTelegramMessage
-		saveDailyDataNoUpdate()
+		saveDailyDataNoMessageUpdate()
 		dataMu.Unlock()
 	}
 }
+
+// Новая функция без сохранения данных
+func updateTelegramMessageSimple() {
+	dataMu.RLock()
+	// Создаем копии данных для использования вне блокировки
+	prices := make(map[string]int)
+	buyStats := make(map[string]int)
+	sellStats := make(map[string]int)
+	date := dailyData.Date
+	messageID := dailyData.MessageID
+	
+	for k, v := range data.Prices {
+		prices[k] = v
+	}
+	for k, v := range data.BuyStats {
+		buyStats[k] = v
+	}
+	for k, v := range data.SellStats {
+		sellStats[k] = v
+	}
+	dataMu.RUnlock()
+	
+	// Обновляем Telegram сообщение
+	updateTelegramMessageWithoutLocks(prices, buyStats, sellStats, date, messageID)
+}
+
 
 // Новая функция сохранения без обновления Telegram
 func saveDailyDataNoUpdate() {
@@ -915,26 +944,7 @@ func startStatsSender() {
 }
 
 func updateTelegramMessage() {
-	dataMu.RLock()
-	// Создаем копии данных для использования вне блокировки
-	prices := make(map[string]int)
-	buyStats := make(map[string]int)
-	sellStats := make(map[string]int)
-	date := dailyData.Date
-	messageID := dailyData.MessageID
-	
-	for k, v := range data.Prices {
-		prices[k] = v
-	}
-	for k, v := range data.BuyStats {
-		buyStats[k] = v
-	}
-	for k, v := range data.SellStats {
-		sellStats[k] = v
-	}
-	dataMu.RUnlock()
-	
-	updateTelegramMessageWithStats(prices, buyStats, sellStats, date, messageID)
+	updateTelegramMessageSimple()
 }
 
 func updateTelegramMessageWithStats(prices, buyStats, sellStats map[string]int, date string, messageID int) {
