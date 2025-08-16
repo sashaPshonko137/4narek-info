@@ -599,7 +599,6 @@ func adjustPrice(item string) {
 		lastUpdate = now.Add(-cfg.AnalysisTime)
 	}
 
-	// Сбор данных под одним локом
 	dataMu.Lock()
 	sales := countRecentSales(item, lastUpdate)
 	buys := countRecentBuys(item, lastUpdate)
@@ -609,7 +608,6 @@ func adjustPrice(item string) {
 	ratio := ratioBefore
 	dataMu.Unlock()
 
-	// Считаем слот-лимиты
 	salesRate := float64(cfg.NormalSales) / cfg.AnalysisTime.Minutes()
 	totalSalesRate := 0.0
 
@@ -629,12 +627,10 @@ func adjustPrice(item string) {
 		allocatedSlots = 1
 	}
 
-	// Собираем данные о наличии предметов без повторных вызовов
 	var (
 		totalTypeItems     int
 		currentItemCount   int
 		totalInventory     int
-		inventoryFreeSlots int
 	)
 
 	clientItemsMu.Lock()
@@ -657,10 +653,9 @@ func adjustPrice(item string) {
 	}
 	clientItemsMu.Unlock()
 
-	inventoryFreeSlots = inventoryLimit[cfg.Type] - totalInventory
+	inventoryFreeSlots := inventoryLimit[cfg.Type] - totalInventory
 	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
 
-	// === Логика изменения цены ===
 	if sales >= cfg.NormalSales {
 		expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
 		if sales >= 3 && float64(buys) > expectedBuys {
@@ -709,7 +704,6 @@ func adjustPrice(item string) {
 		}
 	}
 
-	// === Обновление и рассылка ===
 	if newPrice != priceBefore || ratio != ratioBefore {
 		dataMu.Lock()
 		data.Prices[item] = newPrice
@@ -732,41 +726,42 @@ func adjustPrice(item string) {
 
 		updateTelegramMessage()
 	}
-
 }
+
 
 func startStatsSender() {
-    ticker := time.NewTicker(10 * time.Minute) // Интервал отправки
-    defer ticker.Stop()
-    
-    for range ticker.C {
-        dataMu.Lock()
-        now := time.Now()
-        
-        for item, cfg := range itemsConfig {
-            lastUpdate, ok := swordTimes[item]
-            if !ok {
-                continue
-            }
-            
-            sales := countRecentSales(item, lastUpdate)
-            price := data.Prices[item]
-            ratio := data.Ratios[item]
-            
-            sendIntervalStatsToTelegram(
-                item,
-                lastUpdate,
-                now,
-                sales,
-                cfg.NormalSales,
-                price,
-                price, // текущая цена, без изменений
-                ratio,
-            )
-        }
-        dataMu.Unlock()
-    }
+	ticker := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		dataMu.Lock()
+		now := time.Now()
+
+		for item, cfg := range itemsConfig {
+			lastUpdate, ok := swordTimes[item]
+			if !ok {
+				continue
+			}
+
+			sales := countRecentSales(item, lastUpdate)
+			price := data.Prices[item]
+			ratio := data.Ratios[item]
+
+			sendIntervalStatsToTelegram(
+				item,
+				lastUpdate,
+				now,
+				sales,
+				cfg.NormalSales,
+				price,
+				price,
+				ratio,
+			)
+		}
+		dataMu.Unlock()
+	}
 }
+
 
 func updateTelegramMessage() {
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
@@ -826,21 +821,15 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		status = "⚠️"
 	}
 
-	// 1. Получаем онлайн с внешнего сервера
 	onlineCount := getOnlineCount()
-
-	// 2. Подсчитываем покупки за интервал
 	buyCount := 0
 	for _, trade := range data.TradeHistory[item] {
 		if trade.Type == "buy" && trade.Time.After(start) && trade.Time.Before(end) {
 			buyCount++
 		}
 	}
-
-	// 3. Получаем количество предметов на руках у клиентов
 	onHand := getItemCount(item)
 
-	// 4. Формируем сообщение
 	msg := fmt.Sprintf(
 		"*%s* %s\n"+
 			"⏳ Интервал: %s - %s\n"+
@@ -860,11 +849,10 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		priceBefore,
 		priceAfter,
 		ratio,
-		onHand,        // добавлено
+		onHand,
 		onlineCount,
 	)
 
-	// 5. Отправляем в Telegram
 	ctx := context.Background()
 	_, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:    -4633184325,
@@ -875,7 +863,6 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		log.Printf("[Telegram] Ошибка при отправке интервал-статы: %v", err)
 	}
 
-	// 6. Сохраняем лог в файл (без Markdown)
 	plainLog := fmt.Sprintf(
 		"%s [%s → %s] %s | Покупки: %d | Продажи: %d/%d | Цена: %d→%d | На руках: %d | Онлайн: %d\n",
 		item,
@@ -887,14 +874,12 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		expectedSales,
 		priceBefore,
 		priceAfter,
-		onHand,        // добавлено
+		onHand,
 		onlineCount,
 	)
 
 	appendToFile("logs_interval.txt", plainLog)
 }
-
-
 
 
 func appendToFile(filename, content string) {
