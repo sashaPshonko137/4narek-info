@@ -821,15 +821,21 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		status = "⚠️"
 	}
 
+	// 1. Получаем онлайн с внешнего сервера
 	onlineCount := getOnlineCount()
+
+	// 2. Подсчитываем покупки за интервал
 	buyCount := 0
 	for _, trade := range data.TradeHistory[item] {
 		if trade.Type == "buy" && trade.Time.After(start) && trade.Time.Before(end) {
 			buyCount++
 		}
 	}
+
+	// 3. Получаем количество предметов на руках у клиентов
 	onHand := getItemCount(item)
 
+	// 4. Формируем сообщение
 	msg := fmt.Sprintf(
 		"*%s* %s\n"+
 			"⏳ Интервал: %s - %s\n"+
@@ -849,10 +855,11 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		priceBefore,
 		priceAfter,
 		ratio,
-		onHand,
+		onHand,        // добавлено
 		onlineCount,
 	)
 
+	// 5. Отправляем в Telegram
 	ctx := context.Background()
 	_, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:    -4633184325,
@@ -863,6 +870,7 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		log.Printf("[Telegram] Ошибка при отправке интервал-статы: %v", err)
 	}
 
+	// 6. Сохраняем лог в файл (без Markdown)
 	plainLog := fmt.Sprintf(
 		"%s [%s → %s] %s | Покупки: %d | Продажи: %d/%d | Цена: %d→%d | На руках: %d | Онлайн: %d\n",
 		item,
@@ -874,12 +882,14 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		expectedSales,
 		priceBefore,
 		priceAfter,
-		onHand,
+		onHand,        // добавлено
 		onlineCount,
 	)
 
 	appendToFile("logs_interval.txt", plainLog)
 }
+
+
 
 
 func appendToFile(filename, content string) {
