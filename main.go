@@ -45,8 +45,8 @@ var itemLimit = map[string]int{
 }
 
 var inventoryLimit = map[string]int{
-	"netherite_sword": 36 * 3 * 6,
-	"elytra":          36 * 3,
+	"netherite_sword": 28 * 3 * 6,
+	"elytra":          28 * 3,
 }
 
 type ItemConfig struct {
@@ -683,6 +683,7 @@ func adjustPrice(item string) {
 		totalTypeItems   int
 		currentItemCount int
 		totalInventory   int
+		inventoryCount    int
 	)
 
 	for _, items := range clientItems {
@@ -699,6 +700,9 @@ func adjustPrice(item string) {
 		for name, count := range inv {
 			if itemsConfig[name].Type == cfg.Type {
 				totalInventory += count
+			}
+			if name == item {
+				inventoryCount += count
 			}
 		}
 	}
@@ -735,14 +739,14 @@ func adjustPrice(item string) {
 			allowedStock += 1
 		}
 
-		if currentItemCount > allowedStock {
+		if currentItemCount > allowedStock{
 			newPrice -= cfg.PriceStep
 			ratio = 0.8
 			if newPrice < cfg.MinPrice {
 				newPrice = cfg.MinPrice
 			}
-		} else if inventoryFreeSlots > cfg.NormalSales {
-			if freeSlots < allocatedSlots && !(buys < cfg.NormalSales) {
+		} else if inventoryFreeSlots > cfg.NormalSales && inventoryCount < cfg.NormalSales {
+			if freeSlots < allocatedSlots && buys > cfg.NormalSales {
 				mutex.Unlock()
 				return
 			}
