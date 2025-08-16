@@ -818,7 +818,6 @@ func startStatsSender() {
 				sales,
 				cfg.NormalSales,
 				price,
-				price,
 				ratio,
 			)
 			mutex.Lock()
@@ -831,7 +830,7 @@ func updateTelegramMessage() {
 	updateTelegramMessageSimple()
 }
 
-func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales, expectedSales, priceBefore, priceAfter int, ratio float64) {
+func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales, expectedSales, price int, ratio float64) {
 	status := "✅"
 	if actualSales < expectedSales {
 		status = "⚠️"
@@ -861,7 +860,7 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 			"⏳ Интервал: %s - %s\n"+
 			"📦 Покупки: *%d*\n"+
 			"📊 Продажи: *%d* из *%d* (норма)\n"+
-			"💸 Цена: %d → %d\n"+
+			"💸 Цена: %d\n"+
 			"🧮 Коэффициент: %.2f\n"+
 			"🎒 На ah: %d\n"+
 			"🎒 В инвентаре: %d\n"+
@@ -873,8 +872,7 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		buyCount,
 		actualSales,
 		expectedSales,
-		priceBefore,
-		priceAfter,
+		price,
 		ratio,
 		onHand,
 		getInventoryCount(item),
@@ -894,7 +892,7 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 
 	// 6. Сохраняем лог в файл (без Markdown)
 	plainLog := fmt.Sprintf(
-		"%s [%s → %s] %s | Покупки: %d | Продажи: %d/%d | Цена: %d→%d | На руках: %d | Онлайн: %d\n",
+		"%s [%s → %s] %s | Покупки: %d | Продажи: %d/%d | Цена: %d | На руках: %d | Онлайн: %d\n",
 		item,
 		start.Format("15:04:05"),
 		end.Format("15:04:05"),
@@ -902,8 +900,7 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		buyCount,
 		actualSales,
 		expectedSales,
-		priceBefore,
-		priceAfter,
+		price,
 		onHand,
 		onlineCount,
 	)
