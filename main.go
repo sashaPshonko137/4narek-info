@@ -152,51 +152,6 @@ var (
 			MaxPrice:     5500009,
 			Type:         "netherite_sword",
 		},
-		"poison1": {
-			BasePrice:    4100010,
-			NormalSales:  2,
-			PriceStep:    100000,
-			AnalysisTime: 13 * time.Minute,
-			MinPrice:     700010,
-			MaxPrice:     7000010,
-			Type:         "netherite_sword",
-		},
-		"poison2": {
-			BasePrice:    5000011,
-			NormalSales:  1,
-			PriceStep:    100000,
-			AnalysisTime: 13 * time.Minute,
-			MinPrice:     700011,
-			MaxPrice:     7000011,
-			Type:         "netherite_sword",
-		},
-		"poison3": {
-			BasePrice:    5200012,
-			NormalSales:  1,
-			PriceStep:    100000,
-			AnalysisTime: 13 * time.Minute,
-			MinPrice:     700012,
-			MaxPrice:     7000012,
-			Type:         "netherite_sword",
-		},
-		"vampiryzm1": {
-			BasePrice:    5100013,
-			NormalSales:  1,
-			PriceStep:    100000,
-			AnalysisTime: 13 * time.Minute,
-			MinPrice:     700013,
-			MaxPrice:     7000013,
-			Type:         "netherite_sword",
-		},
-		"vampiryzm2": {
-			BasePrice:    5200014,
-			NormalSales:  1,
-			PriceStep:    100000,
-			AnalysisTime: 13 * time.Minute,
-			MinPrice:     700014,
-			MaxPrice:     7000014,
-			Type:         "netherite_sword",
-		},
 	}
 )
 
@@ -623,8 +578,7 @@ func fixPrice() {
 			log.Println("fixing all prices ", time.Now().Format("15:04:05"))
 			items := []string{
 				"sword5", "sword6", "sword7", "pochti-megasword", "elytra",
-				"elytra-mend", "elytra-unbreak", "megasword", "mend", "poison1",
-				"poison2", "poison3", "vampiryzm1", "vampiryzm2",
+				"elytra-mend", "elytra-unbreak", "megasword",
 			}
 			for _, item := range items {
 				adjustPrice(item)
