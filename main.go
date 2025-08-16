@@ -254,6 +254,7 @@ func main() {
 	// Загрузка данных за сегодня
 	loadDailyData(loc)
 
+
 	// WebSocket сервер
 	http.HandleFunc("/ws", handleConnections)
 	go func() {
@@ -265,6 +266,7 @@ func main() {
 	go checkDayChange(loc)
 	//time.Sleep(1 * time.Minute)
 	go fixPrice()
+	go startStatsSender() 
 
 	select {}
 }
@@ -731,18 +733,40 @@ func adjustPrice(item string) {
 		updateTelegramMessage()
 	}
 
-	sendIntervalStatsToTelegram(
-		item,
-		lastUpdate,
-		now,
-		sales,
-		cfg.NormalSales,
-		priceBefore,
-		newPrice,
-		ratio,
-	)
 }
 
+func startStatsSender() {
+    ticker := time.NewTicker(10 * time.Minute) // Интервал отправки
+    defer ticker.Stop()
+    
+    for range ticker.C {
+        dataMu.Lock()
+        now := time.Now()
+        
+        for item, cfg := range itemsConfig {
+            lastUpdate, ok := swordTimes[item]
+            if !ok {
+                continue
+            }
+            
+            sales := countRecentSales(item, lastUpdate)
+            price := data.Prices[item]
+            ratio := data.Ratios[item]
+            
+            sendIntervalStatsToTelegram(
+                item,
+                lastUpdate,
+                now,
+                sales,
+                cfg.NormalSales,
+                price,
+                price, // текущая цена, без изменений
+                ratio,
+            )
+        }
+        dataMu.Unlock()
+    }
+}
 
 func updateTelegramMessage() {
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
