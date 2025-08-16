@@ -860,6 +860,7 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 			"💸 Цена: %d → %d\n"+
 			"🧮 Коэффициент: %.2f\n"+
 			"🎒 На ah: %d\n"+
+			"🎒 В инвентаре: %d\n"+
 			"👥 Онлайн: %d игроков",
 		item,
 		status,
@@ -872,6 +873,7 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		priceAfter,
 		ratio,
 		onHand,
+		getInventoryCount(item),
 		onlineCount,
 	)
 
