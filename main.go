@@ -509,6 +509,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		mutex.Lock()
 		switch msg.Action {
 		case "buy":
+			log.Printf("[SELL] Перед инкрементом: %d", data.BuyStats[msg.Type])
 			data.BuyStats[msg.Type]++
 			data.LastTrade[msg.Type] = time.Now()
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "buy"})
@@ -516,6 +517,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			// updateTelegramMessage()
 
 		case "sell":
+			log.Printf("[SELL] Перед инкрементом: %d", data.SellStats[msg.Type])
 			data.SellStats[msg.Type]++
 			data.LastTrade[msg.Type] = time.Now()
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "sell"})
