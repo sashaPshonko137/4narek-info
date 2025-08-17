@@ -219,7 +219,7 @@ func main() {
 
 	// Загрузка данных за сегодня
 	loadDailyData(loc)
-	// updateTelegramMessageSimple()
+	updateTelegramMessageSimple()
 
 	// WebSocket сервер
 	http.HandleFunc("/ws", handleConnections)
@@ -329,56 +329,67 @@ func saveDailyDataNoMessageUpdate() {
 		return
 	}
 }
+
 func updateTelegramMessageWithoutLocks(prices, buyStats, sellStats map[string]int, date string, messageID int) {
-    currentTime := time.Now().Format("2006-01-02 15:04:05")
+	currentTime := time.Now().Format("2006-01-02 15:04:05")
 
-    msgText := fmt.Sprintf("📊 Статистика за %s\nПоследнее обновление: %s\n\n", date, currentTime)
+	msgText := fmt.Sprintf("📊 Статистика за %s\nПоследнее обновление: %s\n\n", date, currentTime)
 
-    for item := range itemsConfig {
-        msgText += fmt.Sprintf(
-            "🔹 %s: %d ₽\n🛒 Куплено: %d\n💰 Продано: %d\n\n",
-            item,
-            prices[item],
-            buyStats[item],
-            sellStats[item],
-        )
-    }
+	for item := range itemsConfig {
+		msgText += fmt.Sprintf(
+			"🔹 %s: %d ₽\n🛒 Куплено: %d\n💰 Продано: %d\n\n",
+			item,
+			prices[item],
+			buyStats[item],
+			sellStats[item],
+		)
+	}
 
-    ctx := context.Background()
-    var err error
+	ctx := context.Background()
 
-    if messageID == 0 {
-        // Отправляем новое сообщение
-        msg, sendErr := tgBot.SendMessage(ctx, &bot.SendMessageParams{
-            ChatID: chatID,
-            Text:   msgText,
-        })
-        if sendErr != nil {
-            log.Printf("[Telegram error] Не удалось отправить сообщение: %v", sendErr)
-            return
-        }
-        messageID = msg.ID
-    } else {
-        // Пытаемся обновить существующее сообщение
-        _, err = tgBot.EditMessageText(ctx, &bot.EditMessageTextParams{
-            ChatID:    chatID,
-            MessageID: messageID,
-            Text:      msgText,
-        })
-        if err != nil {
-            log.Printf("[Telegram error] Не удалось обновить сообщение: %v", err)
-            return
-        }
-    }
+	var newMessageID int
+	if messageID == 0 {
+		msg, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
+			ChatID: chatID,
+			Text:   msgText,
+		})
+		if err != nil {
+			log.Printf("[Telegram error] Не удалось отправить новое сообщение: %v", err)
+			return
+		}
+		newMessageID = msg.ID
+	} else {
+		_, err := tgBot.EditMessageText(ctx, &bot.EditMessageTextParams{
+			ChatID:    chatID,
+			MessageID: messageID,
+			Text:      msgText,
+		})
+		if err != nil {
+			log.Printf("[Telegram error] Не удалось обновить сообщение: %v", err)
 
-    // Обновляем messageID если он изменился
-    if messageID != dailyData.MessageID {
-        mutex.Lock()
-        dailyData.MessageID = messageID
-        saveDailyDataNoMessageUpdate()
-        mutex.Unlock()
-    }
+			// Попробуем отправить заново, если редактирование не удалось
+			msg, sendErr := tgBot.SendMessage(ctx, &bot.SendMessageParams{
+				ChatID: chatID,
+				Text:   msgText,
+			})
+			if sendErr == nil {
+				newMessageID = msg.ID
+			} else {
+				log.Printf("[Telegram error] Повторная отправка тоже не удалась: %v", sendErr)
+				return
+			}
+		}
+	}
+
+	// Обновляем messageID если он изменился
+	if newMessageID != 0 {
+		mutex.Lock()
+		dailyData.MessageID = newMessageID
+		saveDailyDataNoMessageUpdate()
+		mutex.Unlock()
+	}
 }
+
 func updateTelegramMessageSimple() {
 	mutex.Lock()
 	// Создаем копии данных для использования вне блокировки
@@ -509,15 +520,13 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		mutex.Lock()
 		switch msg.Action {
 		case "buy":
-			log.Printf("[SELL] Перед инкрементом: %d", data.BuyStats[msg.Type])
 			data.BuyStats[msg.Type]++
 			data.LastTrade[msg.Type] = time.Now()
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "buy"})
 			mutex.Unlock()
-			// updateTelegramMessage()
+			updateTelegramMessage()
 
 		case "sell":
-			log.Printf("[SELL] Перед инкрементом: %d", data.SellStats[msg.Type])
 			data.SellStats[msg.Type]++
 			data.LastTrade[msg.Type] = time.Now()
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "sell"})
@@ -531,7 +540,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				Time: time.Now(), Type: "try-sell",
 			})
 			mutex.Unlock()
-			// updateTelegramMessage()
+			updateTelegramMessage()
 
 		case "info":
 			err = ws.WriteJSON(PriceAndRatio{
@@ -589,18 +598,14 @@ func fixPrice() {
 }
 
 func countRecentSales(item string, since time.Time) int {
-    if since.IsZero() {
-        return 0
-    }
-    
-    count := 0
-    for _, trade := range data.TradeHistory[item] {
-        // Добавляем небольшой допуск в 1 секунду для сравнения времени
-        if trade.Type == "sell" && !trade.Time.Before(since.Add(-time.Second)) && trade.Time.Before(time.Now()) {
-            count++
-        }
-    }
-    return count
+	// Эта функция вызывается с уже заблокированным mutex
+	count := 0
+	for _, trade := range data.TradeHistory[item] {
+		if trade.Type == "sell" && trade.Time.After(since) {
+			count++
+		}
+	}
+	return count
 }
 
 func getItemCount(item string) int {
@@ -635,19 +640,16 @@ func getInventoryFreeSlots(itemType string) int {
 }
 
 func countRecentBuys(item string, since time.Time) int {
-    if since.IsZero() {
-        return 0
-    }
-    
-    count := 0
-    for _, trade := range data.TradeHistory[item] {
-        // Добавляем небольшой допуск в 1 секунду для сравнения времени
-        if trade.Type == "buy" && !trade.Time.Before(since.Add(-time.Second)) && trade.Time.Before(time.Now()) {
-            count++
-        }
-    }
-    return count
+	// Эта функция вызывается с уже заблокированным mutex
+	count := 0
+	for _, trade := range data.TradeHistory[item] {
+		if trade.Type == "buy" && trade.Time.After(since) {
+			count++
+		}
+	}
+	return count
 }
+
 func countRecentTrySells(item string, since time.Time) int {
 	// Эта функция вызывается с уже заблокированным mutex
 	count := 0
@@ -669,12 +671,10 @@ func adjustPrice(item string) {
 	now := time.Now()
 
 	lastUpdate, updatedBefore := swordTimes[item]
-	    if updatedBefore {
-        // Добавить проверку на разумный интервал
-        if now.Sub(lastUpdate) > 24*time.Hour {
-            lastUpdate = now.Add(-cfg.AnalysisTime)
-        }
-    }
+	if updatedBefore && now.Sub(lastUpdate) < cfg.AnalysisTime {
+		mutex.Unlock()
+		return
+	}
 	swordTimes[item] = now
 
 	if !updatedBefore {
@@ -814,7 +814,7 @@ func adjustPrice(item string) {
 			_ = client.WriteJSON(priceData)
 		}
 
-		// updateTelegramMessage()
+		updateTelegramMessage()
 	} else {
 		mutex.Unlock()
 	}
@@ -908,16 +908,16 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 	)
 
 	// 5. Отправляем в Telegram
-ctx := context.Background()
-    _, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
-        ChatID:    -4633184325,
-        Text:      msg,
-        ParseMode: "Markdown",
-    })
-    if err != nil {
-        log.Printf("[Telegram] Ошибка при отправке интервал-статы: %v", err)
-        return // Просто логируем ошибку и выходим
-    }
+	ctx := context.Background()
+	_, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:    -4633184325,
+		Text:      msg,
+		ParseMode: "Markdown",
+	})
+	if err != nil {
+		log.Printf("[Telegram] Ошибка при отправке интервал-статы: %v", err)
+	}
+
 	// 6. Сохраняем лог в файл (без Markdown)
 	plainLog := fmt.Sprintf(
 		"%s [%s → %s] %s | Покупки: %d | Продажи: %d/%d | Цена: %d | На руках: %d | Онлайн: %d\n",
