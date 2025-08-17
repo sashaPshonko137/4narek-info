@@ -40,12 +40,12 @@ var (
 )
 
 var itemLimit = map[string]int{
-	"netherite_sword": 140,
+	"netherite_sword": 96,
 	"elytra":          24,
 }
 
 var inventoryLimit = map[string]int{
-	"netherite_sword": 28 * 3 * 6,
+	"netherite_sword": 28 * 3 * 4,
 	"elytra":          28 * 3,
 }
 
@@ -73,7 +73,7 @@ var (
 	itemsConfig = map[string]ItemConfig{
 		"sword5": {
 			BasePrice:    2500001,
-			NormalSales:  6,
+			NormalSales:  5,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice:     500001,
@@ -91,7 +91,7 @@ var (
 		},
 		"sword7": {
 			BasePrice:    4600003,
-			NormalSales:  5,
+			NormalSales:  4,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice:     700003,
@@ -100,7 +100,7 @@ var (
 		},
 		"sword5-unbreak": {
 			BasePrice:    2500004,
-			NormalSales:  6,
+			NormalSales:  5,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice:     500004,
@@ -118,7 +118,7 @@ var (
 		},
 		"sword7-unbreak": {
 			BasePrice:    4600006,
-			NormalSales:  5,
+			NormalSales:  4,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice:     700006,
