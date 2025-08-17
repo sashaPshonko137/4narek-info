@@ -593,7 +593,8 @@ func countRecentSales(item string, since time.Time) int {
     
     count := 0
     for _, trade := range data.TradeHistory[item] {
-        if trade.Type == "sell" && trade.Time.After(since) && trade.Time.Before(time.Now()) {
+        // Добавляем небольшой допуск в 1 секунду для сравнения времени
+        if trade.Type == "sell" && !trade.Time.Before(since.Add(-time.Second)) && trade.Time.Before(time.Now()) {
             count++
         }
     }
@@ -632,16 +633,19 @@ func getInventoryFreeSlots(itemType string) int {
 }
 
 func countRecentBuys(item string, since time.Time) int {
-	// Эта функция вызывается с уже заблокированным mutex
-	count := 0
-	for _, trade := range data.TradeHistory[item] {
-		if trade.Type == "buy" && trade.Time.After(since) {
-			count++
-		}
-	}
-	return count
+    if since.IsZero() {
+        return 0
+    }
+    
+    count := 0
+    for _, trade := range data.TradeHistory[item] {
+        // Добавляем небольшой допуск в 1 секунду для сравнения времени
+        if trade.Type == "buy" && !trade.Time.Before(since.Add(-time.Second)) && trade.Time.Before(time.Now()) {
+            count++
+        }
+    }
+    return count
 }
-
 func countRecentTrySells(item string, since time.Time) int {
 	// Эта функция вызывается с уже заблокированным mutex
 	count := 0
