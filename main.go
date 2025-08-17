@@ -219,7 +219,7 @@ func main() {
 
 	// Загрузка данных за сегодня
 	loadDailyData(loc)
-	updateTelegramMessageSimple()
+	// updateTelegramMessageSimple()
 
 	// WebSocket сервер
 	http.HandleFunc("/ws", handleConnections)
@@ -524,7 +524,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			data.LastTrade[msg.Type] = time.Now()
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "buy"})
 			mutex.Unlock()
-			updateTelegramMessage()
+			// updateTelegramMessage()
 
 		case "sell":
 			data.SellStats[msg.Type]++
@@ -540,7 +540,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				Time: time.Now(), Type: "try-sell",
 			})
 			mutex.Unlock()
-			updateTelegramMessage()
+			// updateTelegramMessage()
 
 		case "info":
 			err = ws.WriteJSON(PriceAndRatio{
@@ -814,7 +814,7 @@ func adjustPrice(item string) {
 			_ = client.WriteJSON(priceData)
 		}
 
-		updateTelegramMessage()
+		// updateTelegramMessage()
 	} else {
 		mutex.Unlock()
 	}
