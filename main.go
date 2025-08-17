@@ -329,67 +329,56 @@ func saveDailyDataNoMessageUpdate() {
 		return
 	}
 }
-
 func updateTelegramMessageWithoutLocks(prices, buyStats, sellStats map[string]int, date string, messageID int) {
-	currentTime := time.Now().Format("2006-01-02 15:04:05")
+    currentTime := time.Now().Format("2006-01-02 15:04:05")
 
-	msgText := fmt.Sprintf("📊 Статистика за %s\nПоследнее обновление: %s\n\n", date, currentTime)
+    msgText := fmt.Sprintf("📊 Статистика за %s\nПоследнее обновление: %s\n\n", date, currentTime)
 
-	for item := range itemsConfig {
-		msgText += fmt.Sprintf(
-			"🔹 %s: %d ₽\n🛒 Куплено: %d\n💰 Продано: %d\n\n",
-			item,
-			prices[item],
-			buyStats[item],
-			sellStats[item],
-		)
-	}
+    for item := range itemsConfig {
+        msgText += fmt.Sprintf(
+            "🔹 %s: %d ₽\n🛒 Куплено: %d\n💰 Продано: %d\n\n",
+            item,
+            prices[item],
+            buyStats[item],
+            sellStats[item],
+        )
+    }
 
-	ctx := context.Background()
+    ctx := context.Background()
+    var err error
 
-	var newMessageID int
-	if messageID == 0 {
-		msg, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
-			ChatID: chatID,
-			Text:   msgText,
-		})
-		if err != nil {
-			log.Printf("[Telegram error] Не удалось отправить новое сообщение: %v", err)
-			return
-		}
-		newMessageID = msg.ID
-	} else {
-		_, err := tgBot.EditMessageText(ctx, &bot.EditMessageTextParams{
-			ChatID:    chatID,
-			MessageID: messageID,
-			Text:      msgText,
-		})
-		if err != nil {
-			log.Printf("[Telegram error] Не удалось обновить сообщение: %v", err)
+    if messageID == 0 {
+        // Отправляем новое сообщение
+        msg, sendErr := tgBot.SendMessage(ctx, &bot.SendMessageParams{
+            ChatID: chatID,
+            Text:   msgText,
+        })
+        if sendErr != nil {
+            log.Printf("[Telegram error] Не удалось отправить сообщение: %v", sendErr)
+            return
+        }
+        messageID = msg.ID
+    } else {
+        // Пытаемся обновить существующее сообщение
+        _, err = tgBot.EditMessageText(ctx, &bot.EditMessageTextParams{
+            ChatID:    chatID,
+            MessageID: messageID,
+            Text:      msgText,
+        })
+        if err != nil {
+            log.Printf("[Telegram error] Не удалось обновить сообщение: %v", err)
+            return
+        }
+    }
 
-			// Попробуем отправить заново, если редактирование не удалось
-			msg, sendErr := tgBot.SendMessage(ctx, &bot.SendMessageParams{
-				ChatID: chatID,
-				Text:   msgText,
-			})
-			if sendErr == nil {
-				newMessageID = msg.ID
-			} else {
-				log.Printf("[Telegram error] Повторная отправка тоже не удалась: %v", sendErr)
-				return
-			}
-		}
-	}
-
-	// Обновляем messageID если он изменился
-	if newMessageID != 0 {
-		mutex.Lock()
-		dailyData.MessageID = newMessageID
-		saveDailyDataNoMessageUpdate()
-		mutex.Unlock()
-	}
+    // Обновляем messageID если он изменился
+    if messageID != dailyData.MessageID {
+        mutex.Lock()
+        dailyData.MessageID = messageID
+        saveDailyDataNoMessageUpdate()
+        mutex.Unlock()
+    }
 }
-
 func updateTelegramMessageSimple() {
 	mutex.Lock()
 	// Создаем копии данных для использования вне блокировки
@@ -913,16 +902,16 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 	)
 
 	// 5. Отправляем в Telegram
-	ctx := context.Background()
-	_, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:    -4633184325,
-		Text:      msg,
-		ParseMode: "Markdown",
-	})
-	if err != nil {
-		log.Printf("[Telegram] Ошибка при отправке интервал-статы: %v", err)
-	}
-
+ctx := context.Background()
+    _, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
+        ChatID:    -4633184325,
+        Text:      msg,
+        ParseMode: "Markdown",
+    })
+    if err != nil {
+        log.Printf("[Telegram] Ошибка при отправке интервал-статы: %v", err)
+        return // Просто логируем ошибку и выходим
+    }
 	// 6. Сохраняем лог в файл (без Markdown)
 	plainLog := fmt.Sprintf(
 		"%s [%s → %s] %s | Покупки: %d | Продажи: %d/%d | Цена: %d | На руках: %d | Онлайн: %d\n",
