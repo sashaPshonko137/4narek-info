@@ -598,14 +598,17 @@ func fixPrice() {
 }
 
 func countRecentSales(item string, since time.Time) int {
-	// Эта функция вызывается с уже заблокированным mutex
-	count := 0
-	for _, trade := range data.TradeHistory[item] {
-		if trade.Type == "sell" && trade.Time.After(since) {
-			count++
-		}
-	}
-	return count
+    if since.IsZero() {
+        return 0
+    }
+    
+    count := 0
+    for _, trade := range data.TradeHistory[item] {
+        if trade.Type == "sell" && trade.Time.After(since) && trade.Time.Before(time.Now()) {
+            count++
+        }
+    }
+    return count
 }
 
 func getItemCount(item string) int {
@@ -671,10 +674,12 @@ func adjustPrice(item string) {
 	now := time.Now()
 
 	lastUpdate, updatedBefore := swordTimes[item]
-	if updatedBefore && now.Sub(lastUpdate) < cfg.AnalysisTime {
-		mutex.Unlock()
-		return
-	}
+	    if updatedBefore {
+        // Добавить проверку на разумный интервал
+        if now.Sub(lastUpdate) > 24*time.Hour {
+            lastUpdate = now.Add(-cfg.AnalysisTime)
+        }
+    }
 	swordTimes[item] = now
 
 	if !updatedBefore {
