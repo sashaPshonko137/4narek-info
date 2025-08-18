@@ -116,15 +116,6 @@ var (
 			MaxPrice:     6000005,
 			Type:         "netherite_sword",
 		},
-		"sword7-unbreak": {
-			BasePrice:    4600006,
-			NormalSales:  4,
-			PriceStep:    100000,
-			AnalysisTime: 10 * time.Minute,
-			MinPrice:     700006,
-			MaxPrice:     7000006,
-			Type:         "netherite_sword",
-		},
 		"pochti-megasword": {
 			BasePrice:    7000007,
 			NormalSales:  1,
@@ -586,7 +577,7 @@ func fixPrice() {
 		} else {
 			log.Println("fixing all prices ", time.Now().Format("15:04:05"))
 			items := []string{
-				"sword5", "sword6", "sword7", "sword5-unbreak", "sword6-unbreak", "sword7-unbreak", "pochti-megasword", "elytra",
+				"sword5", "sword6", "sword7", "sword5-unbreak", "sword6-unbreak", "pochti-megasword", "elytra",
                 "elytra-unbreak", "megasword",
 			}
 			for _, item := range items {
