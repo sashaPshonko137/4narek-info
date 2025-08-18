@@ -71,15 +71,6 @@ type DailyData struct {
 
 var (
 	itemsConfig = map[string]ItemConfig{
-		"sword5": {
-			BasePrice:    2500001,
-			NormalSales:  5,
-			PriceStep:    100000,
-			AnalysisTime: 10 * time.Minute,
-			MinPrice:     500001,
-			MaxPrice:     5000001,
-			Type:         "netherite_sword",
-		},
 		"sword6": {
 			BasePrice:    2900002,
 			NormalSales:  1,
@@ -100,7 +91,7 @@ var (
 		},
 		"sword5-unbreak": {
 			BasePrice:    2500004,
-			NormalSales:  5,
+			NormalSales:  10,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice:     500004,
@@ -577,7 +568,7 @@ func fixPrice() {
 		} else {
 			log.Println("fixing all prices ", time.Now().Format("15:04:05"))
 			items := []string{
-				"sword5", "sword6", "sword7", "sword5-unbreak", "sword6-unbreak", "pochti-megasword", "elytra",
+				"sword6", "sword7", "sword5-unbreak", "sword6-unbreak", "pochti-megasword", "elytra",
                 "elytra-unbreak", "megasword",
 			}
 			for _, item := range items {
