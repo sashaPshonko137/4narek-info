@@ -212,7 +212,6 @@ func main() {
 
 	// Загрузка данных за сегодня
 	loadDailyData(loc)
-	// updateTelegramMessageSimple()
 
 	// WebSocket сервер
 	http.HandleFunc("/ws", handleConnections)
@@ -223,8 +222,9 @@ func main() {
 
 	// Проверка смены дня
 	go checkDayChange(loc)
-	go fixPrice()
-	go startStatsSender()
+
+	// Запускаем таймеры для каждого предмета
+	go startItemTimers()
 
 	select {}
 }
@@ -295,6 +295,59 @@ func loadDailyData(loc *time.Location) {
 
 	// Сохраняем данные
 	saveDailyDataNoMessageUpdate()
+}
+
+func startItemTimers() {
+	for item, cfg := range itemsConfig {
+		go func(item string, cfg ItemConfig) {
+			// Первый запуск — сразу, далее по интервалу
+			ticker := time.NewTicker(cfg.AnalysisTime)
+			defer ticker.Stop()
+
+			// Первый раз сразу
+			adjustAndReport(item, cfg)
+
+			for range ticker.C {
+				adjustAndReport(item, cfg)
+			}
+		}(item, cfg)
+	}
+}
+
+func adjustAndReport(item string, cfg ItemConfig) {
+	// Обновляем цену
+	adjustPrice(item)
+
+	// Отправляем статистику в Telegram
+	now := time.Now()
+	start := now.Add(-cfg.AnalysisTime)
+
+	mutex.Lock()
+	lastUpdate, ok := swordTimes[item]
+	mutex.Unlock()
+
+	// Используем последнее обновление, если есть
+	if ok && lastUpdate.After(start) {
+		start = lastUpdate
+	}
+
+	// Считаем продажи за период
+	mutex.Lock()
+	sales := countRecentSales(item, start)
+	// buyCount := countRecentBuys(item, start)
+	// onHand := getItemCount(item)
+	// inventoryCount := getInventoryCount(item)
+	price := data.Prices[item]
+	ratio := data.Ratios[item]
+	mutex.Unlock()
+
+	// Отправляем в Telegram
+	sendIntervalStatsToTelegram(
+		item,
+		start, now,
+		sales, cfg.NormalSales,
+		price, ratio,
+	)
 }
 
 func saveDailyDataNoMessageUpdate() {
@@ -523,8 +576,14 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			data.SellStats[msg.Type]++
 			data.LastTrade[msg.Type] = time.Now()
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "sell"})
-			mutex.Unlock()
-			adjustPrice(msg.Type)
+			items := []string{
+				"sword6", "sword7", "sword5-unbreak", "sword6-unbreak", "pochti-megasword", "elytra",
+                "elytra-unbreak", "megasword", "порох",
+			}
+			for _, item := range items {
+				mutex.Unlock()
+				adjustPrice(item)
+			}
 
 		case "try-sell":
 			data.TrySellStats[msg.Type]++
