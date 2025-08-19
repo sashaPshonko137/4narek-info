@@ -334,6 +334,7 @@ func adjustAndReport(item string, cfg ItemConfig) {
 	// Считаем продажи за период
 	mutex.Lock()
 	sales := countRecentSales(item, start)
+	buys := countRecentBuys(item, start)
 	// buyCount := countRecentBuys(item, start)
 	// onHand := getItemCount(item)
 	// inventoryCount := getInventoryCount(item)
@@ -345,7 +346,7 @@ func adjustAndReport(item string, cfg ItemConfig) {
 	sendIntervalStatsToTelegram(
 		item,
 		start, now,
-		sales, cfg.NormalSales,
+		sales, cfg.NormalSales, buys,
 		price, ratio,
 	)
 }
@@ -874,45 +875,12 @@ func adjustPrice(item string) {
 	}
 }
 
-func startStatsSender() {
-	ticker := time.NewTicker(10 * time.Minute)
-	defer ticker.Stop()
-
-	for range ticker.C {
-		mutex.Lock()
-		now := time.Now()
-
-		for item, cfg := range itemsConfig {
-			lastUpdate, ok := swordTimes[item]
-			if !ok {
-				continue
-			}
-
-			sales := countRecentSales(item, lastUpdate)
-			price := data.Prices[item]
-			ratio := data.Ratios[item]
-
-			mutex.Unlock()
-			sendIntervalStatsToTelegram(
-				item,
-				lastUpdate,
-				now,
-				sales,
-				cfg.NormalSales,
-				price,
-				ratio,
-			)
-			mutex.Lock()
-		}
-		mutex.Unlock()
-	}
-}
 
 func updateTelegramMessage() {
 	updateTelegramMessageSimple()
 }
 
-func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales, expectedSales, price int, ratio float64) {
+func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales, expectedSales, buyCount, price int, ratio float64) {
 	status := "✅"
 	if actualSales < expectedSales {
 		status = "⚠️"
@@ -922,14 +890,14 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 	onlineCount := getOnlineCount()
 
 	// 2. Подсчитываем покупки за интервал
-	mutex.Lock()
-	buyCount := 0
-	for _, trade := range data.TradeHistory[item] {
-		if trade.Type == "buy" && trade.Time.After(start) && trade.Time.Before(end) {
-			buyCount++
-		}
-	}
-	mutex.Unlock()
+	// mutex.Lock()
+	// buyCount := 0
+	// for _, trade := range data.TradeHistory[item] {
+	// 	if trade.Type == "buy" && trade.Time.After(start) && trade.Time.Before(end) {
+	// 		buyCount++
+	// 	}
+	// }
+	// mutex.Unlock()
 
 	// 3. Получаем количество предметов на руках у клиентов
 	mutex.Lock()
