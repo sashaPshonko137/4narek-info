@@ -735,7 +735,6 @@ func adjustPrice(item string) {
 		expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
 		exxpectedInventory := 2*math.Sqrt(float64(sales))
 		if sales >= 3 && (float64(buys) > expectedBuys || float64(exxpectedInventory) < float64(inventoryCount)) {
-			if item == "порох" {return}
 			if ratio == 0.8 {
 				ratio = 0.75
 			}
@@ -763,7 +762,6 @@ func adjustPrice(item string) {
 
 		if currentItemCount > allowedStock{
 			newPrice -= cfg.PriceStep
-			if item != "порох" {ratio = 0.8}
 			if newPrice < cfg.MinPrice {
 				newPrice = cfg.MinPrice
 			}
