@@ -42,13 +42,13 @@ var (
 var itemLimit = map[string]int{
 	"netherite_sword": 112,
 	"elytra":          24,
-	"gunpowder": 8,
+	"gunpowder":       8,
 }
 
 var inventoryLimit = map[string]int{
 	"netherite_sword": 392,
 	"elytra":          28 * 3,
-	"gunpowder": 28,
+	"gunpowder":       28,
 }
 
 type ItemConfig struct {
@@ -146,14 +146,14 @@ var (
 			Type:         "elytra",
 		},
 		"порох": {
-      BasePrice:    2000011,
-      NormalSales:  5,
-      PriceStep:    100000,
-      AnalysisTime: 10 * time.Minute,
-      MinPrice:     600002,
-      MaxPrice:     6000002,
-      Type:         "gunpowder",
-    },
+			BasePrice:    2000011,
+			NormalSales:  5,
+			PriceStep:    100000,
+			AnalysisTime: 10 * time.Minute,
+			MinPrice:     600002,
+			MaxPrice:     6000002,
+			Type:         "gunpowder",
+		},
 	}
 )
 
@@ -175,7 +175,6 @@ type Data struct {
 var (
 	data   = &Data{}
 	mutex  = sync.Mutex{} // Единственный мьютекс для всей системы
-
 	clients = make(map[*websocket.Conn]bool)
 
 	currentDay string
@@ -290,7 +289,8 @@ func loadDailyData(loc *time.Location) {
 
 	// Инициализация времени последнего обновления
 	for item := range itemsConfig {
-		swordTimes[item] = time.Now()
+		// Устанавливаем время последнего обновления на начало AnalysisTime периода
+		swordTimes[item] = time.Now().Add(-itemsConfig[item].AnalysisTime)
 	}
 
 	// Сохраняем данные
@@ -300,54 +300,76 @@ func loadDailyData(loc *time.Location) {
 func startItemTimers() {
 	for item, cfg := range itemsConfig {
 		go func(item string, cfg ItemConfig) {
-			// Первый запуск — сразу, далее по интервалу
+			log.Printf("[TIMER] Запущен таймер для %s (интервал: %v)", item, cfg.AnalysisTime)
+			
+			// Первый запуск через короткую задержку, чтобы не все предметы начали одновременно
+			time.Sleep(time.Duration(len(itemsConfig)-1) * time.Second)
+			
+			// Создаем тикер с интервалом AnalysisTime
 			ticker := time.NewTicker(cfg.AnalysisTime)
 			defer ticker.Stop()
 
-			// Первый раз сразу
-			adjustAndReport(item, cfg)
-
-			for range ticker.C {
-				adjustAndReport(item, cfg)
+			for {
+				select {
+				case <-ticker.C:
+					adjustAndReport(item, cfg)
+				}
 			}
 		}(item, cfg)
 	}
 }
 
-func adjustAndReport(item string, cfg ItemConfig) {
-	// Обновляем цену
-	adjustPrice(item)
+func getItemStatsForReporting(item string, since time.Time) (sales, buys, trySells, price int, ratio float64) {
+	mutex.Lock()
+	defer mutex.Unlock()
+	
+	sales = countRecentSales(item, since)
+	buys = countRecentBuys(item, since)
+	trySells = countRecentTrySells(item, since)
+	price = data.Prices[item]
+	ratio = data.Ratios[item]
+	
+	return
+}
 
-	// Отправляем статистику в Telegram
+func getInventoryStats(item string) (onHand, inInventory int) {
+	mutex.Lock()
+	defer mutex.Unlock()
+	
+	onHand = getItemCount(item)
+	inInventory = getInventoryCount(item)
+	
+	return
+}
+
+func adjustAndReport(item string, cfg ItemConfig) {
+	// Определяем период анализа
 	now := time.Now()
 	start := now.Add(-cfg.AnalysisTime)
-
-	mutex.Lock()
-	lastUpdate, ok := swordTimes[item]
-	mutex.Unlock()
-
-	// Используем последнее обновление, если есть
-	if ok && lastUpdate.After(start) {
-		start = lastUpdate
-	}
-
-	// Считаем продажи за период
-	mutex.Lock()
-	sales := countRecentSales(item, start)
-	buys := countRecentBuys(item, start)
-	// buyCount := countRecentBuys(item, start)
-	// onHand := getItemCount(item)
-	// inventoryCount := getInventoryCount(item)
-	price := data.Prices[item]
-	ratio := data.Ratios[item]
-	mutex.Unlock()
-
-	// Отправляем в Telegram
+	
+	// Получаем статистику за предыдущий период
+	sales, buys, trySells, price, ratio := getItemStatsForReporting(item, start)
+	
+	// Логируем начало анализа
+	log.Printf("[ANALYSIS] %s: анализ с %s по %s. Продажи: %d (норма: %d)", 
+		item, start.Format("15:04:05"), now.Format("15:04:05"), sales, cfg.NormalSales)
+	
+	// Обновляем цену на основе статистики
+	adjustPrice(item)
+	
+	// Получаем текущие данные после обновления
+	newPrice, newRatio := func() (int, float64) {
+		mutex.Lock()
+		defer mutex.Unlock()
+		return data.Prices[item], data.Ratios[item]
+	}()
+	
+	// Отправляем статистику за ПРЕДЫДУЩИЙ период
 	sendIntervalStatsToTelegram(
 		item,
 		start, now,
-		sales, cfg.NormalSales, buys,
-		price, ratio,
+		float64(sales), float64(cfg.NormalSales), float64(buys), float64(trySells),
+		float64(price), ratio, float64(newPrice), newRatio,
 	)
 }
 
@@ -571,20 +593,14 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			data.LastTrade[msg.Type] = time.Now()
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "buy"})
 			mutex.Unlock()
-			// updateTelegramMessage()
+			// НЕ ОБНОВЛЯЕМ ЦЕНУ - только по таймеру
 
 		case "sell":
 			data.SellStats[msg.Type]++
 			data.LastTrade[msg.Type] = time.Now()
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "sell"})
-			items := []string{
-				"sword6", "sword7", "sword5-unbreak", "sword6-unbreak", "pochti-megasword", "elytra",
-                "elytra-unbreak", "megasword", "порох",
-			}
-			for _, item := range items {
-				mutex.Unlock()
-				adjustPrice(item)
-			}
+			mutex.Unlock()
+			// НЕ ОБНОВЛЯЕМ ЦЕНУ - только по таймеру
 
 		case "try-sell":
 			data.TrySellStats[msg.Type]++
@@ -593,7 +609,7 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 				Time: time.Now(), Type: "try-sell",
 			})
 			mutex.Unlock()
-			// updateTelegramMessage()
+			// НЕ ОБНОВЛЯЕМ ЦЕНУ - только по таймеру
 
 		case "info":
 			err = ws.WriteJSON(PriceAndRatio{
@@ -629,24 +645,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		mutex.Lock()
 		saveDailyData()
 		mutex.Unlock()
-	}
-}
-
-func fixPrice() {
-	for {
-		if getConnectedClientsCount() == 0 {
-			log.Println("Нет подключенных клиентов")
-		} else {
-			log.Println("fixing all prices ", time.Now().Format("15:04:05"))
-			items := []string{
-				"sword6", "sword7", "sword5-unbreak", "sword6-unbreak", "pochti-megasword", "elytra",
-                "elytra-unbreak", "megasword", "порох",
-			}
-			for _, item := range items {
-				adjustPrice(item)
-			}
-		}
-		time.Sleep(1 * time.Minute)
 	}
 }
 
@@ -723,16 +721,18 @@ func adjustPrice(item string) {
 	mutex.Lock()
 	now := time.Now()
 
-	lastUpdate, updatedBefore := swordTimes[item]
-	if updatedBefore && now.Sub(lastUpdate) < cfg.AnalysisTime {
-		mutex.Unlock()
-		return
-	}
+	// Убираем проверку времени - она конфликтует с таймером
+	// lastUpdate, updatedBefore := swordTimes[item]
+	// if updatedBefore && now.Sub(lastUpdate) < cfg.AnalysisTime {
+	//     mutex.Unlock()
+	//     return
+	// }
+	
+	// Всегда обновляем время последнего анализа
 	swordTimes[item] = now
 
-	if !updatedBefore {
-		lastUpdate = now.Add(-cfg.AnalysisTime)
-	}
+	// Берем начало периода как AnalysisTime назад
+	lastUpdate := now.Add(-cfg.AnalysisTime)
 
 	sales := countRecentSales(item, lastUpdate)
 	buys := countRecentBuys(item, lastUpdate)
@@ -763,7 +763,7 @@ func adjustPrice(item string) {
 		totalTypeItems   int
 		currentItemCount int
 		totalInventory   int
-		inventoryCount    int
+		inventoryCount   int
 	)
 
 	for _, items := range clientItems {
@@ -793,8 +793,8 @@ func adjustPrice(item string) {
 	ratio := ratioBefore
 	if sales >= cfg.NormalSales {
 		expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
-		exxpectedInventory := 2*math.Sqrt(float64(sales))
-		if sales >= 3 && (float64(buys) > expectedBuys || float64(exxpectedInventory) < float64(inventoryCount)) {
+		expectedInventory := 2*math.Sqrt(float64(sales))
+		if sales >= 3 && (float64(buys) > expectedBuys || float64(expectedInventory) < float64(inventoryCount)) {
 			if ratio == 0.8 {
 				ratio = 0.75
 			}
@@ -820,7 +820,7 @@ func adjustPrice(item string) {
 			allowedStock += 1
 		}
 
-		if currentItemCount > allowedStock{
+		if currentItemCount > allowedStock {
 			newPrice -= cfg.PriceStep
 			if newPrice < cfg.MinPrice {
 				newPrice = cfg.MinPrice
@@ -845,6 +845,7 @@ func adjustPrice(item string) {
 	}
 
 	if newPrice != priceBefore || ratio != ratioBefore {
+		// Сохраняем изменения
 		data.Prices[item] = newPrice
 		dailyData.Prices[item] = newPrice
 		data.Ratios[item] = ratio
@@ -852,67 +853,70 @@ func adjustPrice(item string) {
 		lastPriceUpdate[item] = now
 		mutex.Unlock()
 
+		log.Printf("[PRICE] %s: цена изменена с %d на %d", item, priceBefore, newPrice)
+
 		// Отправляем обновленные данные всем клиентам
-		mutex.Lock()
-		priceData := PriceAndRatio{
-			Prices: data.Prices,
-			Ratios: data.Ratios,
-		}
-		// Создаем копию clients для использования вне блокировки
-		clientsCopy := make([]*websocket.Conn, 0, len(clients))
-		for client := range clients {
-			clientsCopy = append(clientsCopy, client)
-		}
-		mutex.Unlock()
-
-		for _, client := range clientsCopy {
-			_ = client.WriteJSON(priceData)
-		}
-
-		// updateTelegramMessage()
+		sendPriceUpdateToClients()
 	} else {
 		mutex.Unlock()
 	}
 }
 
+func sendPriceUpdateToClients() {
+	// Создаем копию данных для отправки
+	var priceData PriceAndRatio
+	
+	mutex.Lock()
+	priceData = PriceAndRatio{
+		Prices: make(map[string]int),
+		Ratios: make(map[string]float64),
+	}
+	for k, v := range data.Prices {
+		priceData.Prices[k] = v
+	}
+	for k, v := range data.Ratios {
+		priceData.Ratios[k] = v
+	}
+	mutex.Unlock()
 
-func updateTelegramMessage() {
-	updateTelegramMessageSimple()
+	// Отправляем клиентам
+	mutex.Lock()
+	clientsCopy := make([]*websocket.Conn, 0, len(clients))
+	for client := range clients {
+		clientsCopy = append(clientsCopy, client)
+	}
+	mutex.Unlock()
+
+	for _, client := range clientsCopy {
+		if err := client.WriteJSON(priceData); err != nil {
+			log.Printf("Ошибка отправки обновления клиенту: %v", err)
+		}
+	}
 }
 
-func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales, expectedSales, buyCount, price int, ratio float64) {
+func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales, expectedSales, buyCount, trySellCount, 
+                                oldPrice, oldRatio, newPrice, newRatio float64) {
 	status := "✅"
 	if actualSales < expectedSales {
 		status = "⚠️"
 	}
 
-	// 1. Получаем онлайн с внешнего сервера
+	// Получаем онлайн с внешнего сервера
 	onlineCount := getOnlineCount()
 
-	// 2. Подсчитываем покупки за интервал
-	// mutex.Lock()
-	// buyCount := 0
-	// for _, trade := range data.TradeHistory[item] {
-	// 	if trade.Type == "buy" && trade.Time.After(start) && trade.Time.Before(end) {
-	// 		buyCount++
-	// 	}
-	// }
-	// mutex.Unlock()
+	// Получаем количество предметов на руках у клиентов
+	onHand, inInventory := getInventoryStats(item)
 
-	// 3. Получаем количество предметов на руках у клиентов
-	mutex.Lock()
-	onHand := getItemCount(item)
-	mutex.Unlock()
-
-	// 4. Формируем сообщение
+	// Формируем сообщение
 	msg := fmt.Sprintf(
 		"*%s* %s\n"+
 			"⏳ Интервал: %s - %s\n"+
-			"📦 Покупки: *%d*\n"+
-			"📊 Продажи: *%d* из *%d* (норма)\n"+
-			"💸 Цена: %d\n"+
-			"🧮 Коэффициент: %.2f\n"+
-			"🎒 На ah: %d\n"+
+			"📦 Покупки: *%.0f*\n"+
+			"🛒 Попытки продаж: *%.0f*\n"+
+			"📊 Продажи: *%.0f* из *%.0f* (норма)\n"+
+			"💰 Цена: %d → %d (%s)\n"+
+			"🧮 Коэффициент: %.2f → %.2f\n"+
+			"🎒 На аукционе: %d\n"+
 			"🎒 В инвентаре: %d\n"+
 			"👥 Онлайн: %d игроков",
 		item,
@@ -920,16 +924,18 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		start.Format("15:04:05"),
 		end.Format("15:04:05"),
 		buyCount,
+		trySellCount,
 		actualSales,
 		expectedSales,
-		price,
-		ratio,
+		int(oldPrice), int(newPrice), 
+		getPriceChangeEmoji(int(oldPrice), int(newPrice)),
+		oldRatio, newRatio,
 		onHand,
-		getInventoryCount(item),
+		inInventory,
 		onlineCount,
 	)
 
-	// 5. Отправляем в Telegram
+	// Отправляем в Telegram
 	ctx := context.Background()
 	_, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:    -4633184325,
@@ -940,9 +946,9 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		log.Printf("[Telegram] Ошибка при отправке интервал-статы: %v", err)
 	}
 
-	// 6. Сохраняем лог в файл (без Markdown)
+	// Сохраняем лог в файл
 	plainLog := fmt.Sprintf(
-		"%s [%s → %s] %s | Покупки: %d | Продажи: %d/%d | Цена: %d | На руках: %d | Онлайн: %d\n",
+		"%s [%s → %s] %s | Покупки: %.0f | Продажи: %.0f/%.0f | Цена: %d→%d | Коэф: %.2f→%.2f | На руках: %d | Онлайн: %d\n",
 		item,
 		start.Format("15:04:05"),
 		end.Format("15:04:05"),
@@ -950,12 +956,22 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		buyCount,
 		actualSales,
 		expectedSales,
-		price,
+		int(oldPrice), int(newPrice),
+		oldRatio, newRatio,
 		onHand,
 		onlineCount,
 	)
 
 	appendToFile("logs_interval.txt", plainLog)
+}
+
+func getPriceChangeEmoji(oldPrice, newPrice int) string {
+	if newPrice > oldPrice {
+		return "📈 +"
+	} else if newPrice < oldPrice {
+		return "📉 -"
+	}
+	return "↔️ ="
 }
 
 func appendToFile(filename, content string) {
