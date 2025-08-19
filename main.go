@@ -143,6 +143,15 @@ var (
 			MaxPrice:     5000010,
 			Type:         "elytra",
 		},
+		"порох": {
+      BasePrice:    600011,
+      NormalSales:  5,
+      PriceStep:    100000,
+      AnalysisTime: 10 * time.Minute,
+      MinPrice:     600002,
+      MaxPrice:     6000002,
+      Type:         "gunpowder",
+    },
 	}
 )
 
@@ -569,7 +578,7 @@ func fixPrice() {
 			log.Println("fixing all prices ", time.Now().Format("15:04:05"))
 			items := []string{
 				"sword6", "sword7", "sword5-unbreak", "sword6-unbreak", "pochti-megasword", "elytra",
-                "elytra-unbreak", "megasword",
+                "elytra-unbreak", "megasword", "порох",
 			}
 			for _, item := range items {
 				adjustPrice(item)
