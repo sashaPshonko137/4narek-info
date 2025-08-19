@@ -841,7 +841,7 @@ func adjustPrice(item string) {
 		}
 	}
 	if item == "порох" {
-		ratio = 0.5
+		ratio = 0.7
 	}
 
 	if newPrice != priceBefore || ratio != ratioBefore {
