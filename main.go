@@ -782,6 +782,9 @@ func adjustPrice(item string) {
 			}
 		}
 	}
+	if item == "порох" {
+		ratio = 0.5
+	}
 
 	if newPrice != priceBefore || ratio != ratioBefore {
 		data.Prices[item] = newPrice
