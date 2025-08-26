@@ -74,7 +74,7 @@ type DailyData struct {
 var (
 	itemsConfig = map[string]ItemConfig{
 		"sword6": {
-			BasePrice:    2900002,
+			BasePrice:    1500002,
 			NormalSales:  1,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -83,7 +83,7 @@ var (
 			Type:         "netherite_sword",
 		},
 		"sword7": {
-			BasePrice:    4600003,
+			BasePrice:    2000003,
 			NormalSales:  8,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -92,7 +92,7 @@ var (
 			Type:         "netherite_sword",
 		},
 		"sword5-unbreak": {
-			BasePrice:    2500004,
+			BasePrice:    1000004,
 			NormalSales:  10,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -101,7 +101,7 @@ var (
 			Type:         "netherite_sword",
 		},
 		"sword6-unbreak": {
-			BasePrice:    2900005,
+			BasePrice:    1600005,
 			NormalSales:  1,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -110,7 +110,7 @@ var (
 			Type:         "netherite_sword",
 		},
 		"pochti-megasword": {
-			BasePrice:    7000007,
+			BasePrice:    2800007,
 			NormalSales:  1,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -119,7 +119,7 @@ var (
 			Type:         "netherite_sword",
 		},
 		"megasword": {
-			BasePrice:    7400008,
+			BasePrice:    3300008,
 			NormalSales:  2,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -128,7 +128,7 @@ var (
 			Type:         "netherite_sword",
 		},
 		"elytra": {
-			BasePrice:    1200009,
+			BasePrice:    1000009,
 			NormalSales:  11,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -137,7 +137,7 @@ var (
 			Type:         "elytra",
 		},
 		"elytra-unbreak": {
-			BasePrice:    2700010,
+			BasePrice:    1500010,
 			NormalSales:  5,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -146,7 +146,7 @@ var (
 			Type:         "elytra",
 		},
 		"порох": {
-			BasePrice:    2000011,
+			BasePrice:    800011,
 			NormalSales:  5,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
