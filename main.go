@@ -43,12 +43,14 @@ var itemLimit = map[string]int{
 	"netherite_sword": 24,
 	"elytra":          24,
 	"gunpowder":       8,
+	"netherite_chestplate": 24,
 }
 
 var inventoryLimit = map[string]int{
 	"netherite_sword": 28*3,
 	"elytra":          28 * 3,
 	"gunpowder":       28,
+	"netherite_chestplate": 28*3,
 }
 
 type ItemConfig struct {
