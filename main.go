@@ -154,6 +154,24 @@ var (
 			MaxPrice:     6000002,
 			Type:         "gunpowder",
 		},
+		"нагрудник": {
+			BasePrice:    500011,
+			NormalSales:  5,
+			PriceStep:    100000,
+			AnalysisTime: 10 * time.Minute,
+			MinPrice:     600002,
+			MaxPrice:     6000002,
+			Type:         "gunpowder",
+		},
+		"нагрудник2": {
+			BasePrice:    1000011,
+			NormalSales:  5,
+			PriceStep:    100000,
+			AnalysisTime: 10 * time.Minute,
+			MinPrice:     600002,
+			MaxPrice:     6000002,
+			Type:         "gunpowder",
+		},
 	}
 )
 
