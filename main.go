@@ -846,7 +846,7 @@ func adjustPrice(item string) {
 				newPrice = cfg.MinPrice
 			}
 		} else if inventoryFreeSlots > cfg.NormalSales {
-			if freeSlots < allocatedSlots && buys > cfg.NormalSales {
+			if freeSlots < allocatedSlots {
 				mutex.Unlock()
 				return
 			}
