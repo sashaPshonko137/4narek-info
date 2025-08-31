@@ -102,15 +102,6 @@ var (
 			MaxPrice:     5000004,
 			Type:         "netherite_sword",
 		},
-		"sword6-unbreak": {
-			BasePrice:    1600005,
-			NormalSales:  1,
-			PriceStep:    100000,
-			AnalysisTime: 10 * time.Minute,
-			MinPrice:     600005,
-			MaxPrice:     6000005,
-			Type:         "netherite_sword",
-		},
 		"pochti-megasword": {
 			BasePrice:    2800007,
 			NormalSales:  1,
