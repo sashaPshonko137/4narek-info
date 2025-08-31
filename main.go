@@ -40,16 +40,16 @@ var (
 )
 
 var itemLimit = map[string]int{
-	"netherite_sword": 24*4,
-	"elytra":          24,
-	"gunpowder":       8,
+	"netherite_sword": 24*3,
+	// "elytra":          24,
+	// "gunpowder":       8,
 	// "netherite_chestplate": 24,
 }
 
 var inventoryLimit = map[string]int{
-	"netherite_sword": 28*3*4,
-	"elytra":          28 * 3,
-	"gunpowder":       28,
+	"netherite_sword": 28*3*3,
+	// "elytra":          28 * 3,
+	// "gunpowder":       28,
 	// "netherite_chestplate": 28*3,
 }
 
@@ -129,33 +129,33 @@ var (
 			MaxPrice:     10000008,
 			Type:         "netherite_sword",
 		},
-		"elytra": {
-			BasePrice:    1000009,
-			NormalSales:  11,
-			PriceStep:    100000,
-			AnalysisTime: 10 * time.Minute,
-			MinPrice:     200009,
-			MaxPrice:     30000009,
-			Type:         "elytra",
-		},
-		"elytra-unbreak": {
-			BasePrice:    1500010,
-			NormalSales:  5,
-			PriceStep:    100000,
-			AnalysisTime: 10 * time.Minute,
-			MinPrice:     300010,
-			MaxPrice:     5000010,
-			Type:         "elytra",
-		},
-		"порох": {
-			BasePrice:    800011,
-			NormalSales:  5,
-			PriceStep:    100000,
-			AnalysisTime: 10 * time.Minute,
-			MinPrice:     600002,
-			MaxPrice:     6000002,
-			Type:         "gunpowder",
-		},
+		// "elytra": {
+		// 	BasePrice:    1000009,
+		// 	NormalSales:  11,
+		// 	PriceStep:    100000,
+		// 	AnalysisTime: 10 * time.Minute,
+		// 	MinPrice:     200009,
+		// 	MaxPrice:     30000009,
+		// 	Type:         "elytra",
+		// },
+		// "elytra-unbreak": {
+		// 	BasePrice:    1500010,
+		// 	NormalSales:  5,
+		// 	PriceStep:    100000,
+		// 	AnalysisTime: 10 * time.Minute,
+		// 	MinPrice:     300010,
+		// 	MaxPrice:     5000010,
+		// 	Type:         "elytra",
+		// },
+		// "порох": {
+		// 	BasePrice:    800011,
+		// 	NormalSales:  5,
+		// 	PriceStep:    100000,
+		// 	AnalysisTime: 10 * time.Minute,
+		// 	MinPrice:     600002,
+		// 	MaxPrice:     6000002,
+		// 	Type:         "gunpowder",
+		// },
 		// "нагрудник": {
 		// 	BasePrice:    500011,
 		// 	NormalSales:  5,
