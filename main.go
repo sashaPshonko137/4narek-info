@@ -183,6 +183,18 @@ type Data struct {
 	TradeHistory map[string][]TradeLog
 }
 
+// ===== НОВАЯ СТРУКТУРА ДЛЯ ВРЕМЕННОГО ХРАНИЛИЩА JSON =====
+type JSONEntry struct {
+	Data      string    // Храним именно строку, а не парсенный JSON
+	Timestamp time.Time
+}
+
+var (
+	jsonStore  []JSONEntry
+	storeMutex sync.Mutex
+)
+// =======================================================
+
 var (
 	data   = &Data{}
 	mutex  = sync.Mutex{} // Единственный мьютекс для всей системы
@@ -225,6 +237,7 @@ func main() {
 
 	// WebSocket сервер
 	http.HandleFunc("/ws", handleConnections)
+	
 	go func() {
 		log.Println("Server started on :8080")
 		log.Print(http.ListenAndServe(":8080", nil))
@@ -536,6 +549,63 @@ func saveDailyData() {
 	}
 }
 
+// ===== НОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С ВРЕМЕННЫМ ХРАНИЛИЩЕМ JSON =====
+func addJSONData(jsonStr string) {
+	storeMutex.Lock()
+	defer storeMutex.Unlock()
+
+	now := time.Now()
+	
+	// Очистка старых записей (старше 2 секунд)
+	var cleaned []JSONEntry
+	for _, entry := range jsonStore {
+		if now.Sub(entry.Timestamp) < 2*time.Second {
+			cleaned = append(cleaned, entry)
+		}
+	}
+	jsonStore = cleaned
+
+	// Добавляем новую запись
+	jsonStore = append(jsonStore, JSONEntry{
+		Data:      jsonStr,
+		Timestamp: now,
+	})
+
+	// Формируем массив строк для отправки
+	var data []string
+	for _, entry := range jsonStore {
+		data = append(data, entry.Data)
+	}
+
+	// Отправляем всем клиентам
+	sendJSONUpdateToClients(data)
+}
+
+func sendJSONUpdateToClients(data []string) {
+	// Создаем сообщение, которое клиенты поймут как обновление данных
+	msg := struct {
+		Action string   `json:"action"`
+		Data   []string `json:"data"`
+	}{
+		Action: "json_update", // Специальное действие для клиентов
+		Data:   data,
+	}
+
+	mutex.Lock()
+	clientsCopy := make([]*websocket.Conn, 0, len(clients))
+	for client := range clients {
+		clientsCopy = append(clientsCopy, client)
+	}
+	mutex.Unlock()
+
+	for _, client := range clientsCopy {
+		if err := client.WriteJSON(msg); err != nil {
+			log.Printf("Ошибка отправки JSON-обновления клиенту: %v", err)
+		}
+	}
+}
+// ===============================================================
+
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -590,6 +660,8 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			Type      string         `json:"type"`   // для buy/sell
 			Items     map[string]int `json:"items"`  // для presence
 			Inventory map[string]int `json:"inventory"`
+			// Новое поле для сырых JSON-данных
+			JSONData  string         `json:"json_data"` // для действия "add"
 		}
 
 		if err := json.Unmarshal(rawMsg, &msg); err != nil {
@@ -649,6 +721,17 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			}
 			mutex.Unlock()
 
+		// ===== НОВОЕ ДЕЙСТВИЕ "add" =====
+		case "add":
+			// Добавляем JSON-строку в хранилище
+			if msg.JSONData != "" {
+				mutex.Unlock()
+				addJSONData(msg.JSONData)
+			} else {
+				mutex.Unlock()
+			}
+		// ================================
+		
 		default:
 			mutex.Unlock()
 		}
@@ -747,6 +830,7 @@ func adjustPrice(item string) {
 
 	sales := countRecentSales(item, lastUpdate)
 	buys := countRecentBuys(item, lastUpdate)
+	trySales := countRecentTrySells(item, lastUpdate)
 	newPrice := data.Prices[item]
 	priceBefore := newPrice
 	ratioBefore := data.Ratios[item]
@@ -831,7 +915,7 @@ func adjustPrice(item string) {
 			allowedStock += 1
 		}
 
-		if currentItemCount > allowedStock {
+		if currentItemCount > allowedStock || trySales > cfg.NormalSales {
 			newPrice -= cfg.PriceStep
 			if newPrice < cfg.MinPrice {
 				newPrice = cfg.MinPrice
