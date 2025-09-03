@@ -102,15 +102,6 @@ var (
 			MaxPrice:     5000004,
 			Type:         "netherite_sword",
 		},
-		"pochti-megasword": {
-			BasePrice:    2800007,
-			NormalSales:  1,
-			PriceStep:    100000,
-			AnalysisTime: 10 * time.Minute,
-			MinPrice:     1000007,
-			MaxPrice:     8000007,
-			Type:         "netherite_sword",
-		},
 		"megasword": {
 			BasePrice:    3300008,
 			NormalSales:  2,
