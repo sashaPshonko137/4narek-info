@@ -879,8 +879,8 @@ func adjustPrice(item string) {
 	ratio := ratioBefore
 	if sales >= cfg.NormalSales {
 		expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
-		expectedInventory := 2*math.Sqrt(float64(sales))
-		if sales >= 3 && (float64(buys) > expectedBuys || float64(expectedInventory) < float64(inventoryCount)) {
+		// expectedInventory := 2*math.Sqrt(float64(sales))
+		if sales >= 3 && (float64(buys) > expectedBuys) {
 			if ratio == 0.8 {
 				ratio = 0.75
 			}
