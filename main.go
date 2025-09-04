@@ -261,7 +261,6 @@ func adjustPrice(item string, onHand, inInventory int) {
 	}
 
 	dataMutex.Lock()
-	defer dataMutex.Unlock()
 
 	now := time.Now()
 	lastUpdate := now.Add(-cfg.AnalysisTime)
@@ -309,6 +308,7 @@ func adjustPrice(item string, onHand, inInventory int) {
 				ratio = 0.8
 			} else {
 				if freeSlots < allocatedSlots {
+					dataMutex.Unlock()
 					return
 				}
 				newPrice += cfg.PriceStep
@@ -332,6 +332,7 @@ func adjustPrice(item string, onHand, inInventory int) {
 			}
 		} else if inventoryFreeSlots > cfg.NormalSales {
 			if freeSlots < allocatedSlots {
+				dataMutex.Unlock()
 				return
 			}
 			if ratio == 0.75 {
@@ -349,17 +350,20 @@ func adjustPrice(item string, onHand, inInventory int) {
 		data.Prices[item] = newPrice
 		data.Ratios[item] = ratio
 		lastPriceUpdate[item] = now
+		dataMutex.Unlock()
 
 		go func() {
 			dailyMutex.Lock()
-			defer dailyMutex.Unlock()
 			dailyData.Prices[item] = newPrice
 			dailyData.Ratios[item] = ratio
 			saveDailyDataNoMessageUpdate()
+			dailyMutex.Unlock()
 		}()
 
 		sendPriceUpdateToClients()
 		log.Printf("[PRICE] %s: цена изменена с %d на %d", item, priceBefore, newPrice)
+	} else {
+		dataMutex.Unlock()
 	}
 }
 
@@ -579,9 +583,11 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "buy"})
 			dataMutex.Unlock()
 
-			dailyMutex.Lock()
-			saveDailyDataNoMessageUpdate()
-			dailyMutex.Unlock()
+			go func() {
+				dailyMutex.Lock()
+				saveDailyDataNoMessageUpdate()
+				dailyMutex.Unlock()
+			}()
 
 		case "sell":
 			dataMutex.Lock()
@@ -590,9 +596,11 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "sell"})
 			dataMutex.Unlock()
 
-			dailyMutex.Lock()
-			saveDailyDataNoMessageUpdate()
-			dailyMutex.Unlock()
+			go func() {
+				dailyMutex.Lock()
+				saveDailyDataNoMessageUpdate()
+				dailyMutex.Unlock()
+			}()
 
 		case "try-sell":
 			dataMutex.Lock()
@@ -601,9 +609,11 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "try-sell"})
 			dataMutex.Unlock()
 
-			dailyMutex.Lock()
-			saveDailyDataNoMessageUpdate()
-			dailyMutex.Unlock()
+			go func() {
+				dailyMutex.Lock()
+				saveDailyDataNoMessageUpdate()
+				dailyMutex.Unlock()
+			}()
 
 		case "info":
 			dataMutex.RLock()
@@ -642,8 +652,13 @@ func sendPriceUpdateToClients() {
 	dataMutex.RUnlock()
 
 	clientsMutex.RLock()
-	defer clientsMutex.RUnlock()
+	clientsCopy := make([]*websocket.Conn, 0, len(clients))
 	for client := range clients {
+		clientsCopy = append(clientsCopy, client)
+	}
+	clientsMutex.RUnlock()
+
+	for _, client := range clientsCopy {
 		err := client.WriteJSON(priceData)
 		if err != nil {
 			log.Printf("Ошибка отправки обновления клиенту: %v", err)
