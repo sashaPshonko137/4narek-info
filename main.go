@@ -26,7 +26,6 @@ type PriceAndRatio struct {
 	Prices map[string]int     `json:"prices"`
 	Ratios map[string]float64 `json:"ratios"`
 }
-var clientsMutex sync.Mutex
 
 var (
 	upgrader = websocket.Upgrader{
@@ -175,18 +174,6 @@ type Data struct {
 	TradeHistory map[string][]TradeLog
 }
 
-// ===== НОВАЯ СТРУКТУРА ДЛЯ ВРЕМЕННОГО ХРАНИЛИЩА JSON =====
-type JSONEntry struct {
-	Data      string    // Храним именно строку, а не парсенный JSON
-	Timestamp time.Time
-}
-
-var (
-	jsonStore  []JSONEntry
-	storeMutex sync.Mutex
-)
-// =======================================================
-
 var (
 	data   = &Data{}
 	mutex  = sync.Mutex{} // Единственный мьютекс для всей системы
@@ -229,7 +216,6 @@ func main() {
 
 	// WebSocket сервер
 	http.HandleFunc("/ws", handleConnections)
-	
 	go func() {
 		log.Println("Server started on :8080")
 		log.Print(http.ListenAndServe(":8080", nil))
@@ -541,67 +527,6 @@ func saveDailyData() {
 	}
 }
 
-// ===== НОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С ВРЕМЕННЫМ ХРАНИЛИЩЕМ JSON =====
-func addJSONData(jsonStr string) {
-	storeMutex.Lock()
-	defer storeMutex.Unlock()
-
-	now := time.Now()
-	
-	// Очистка старых записей (старше 2 секунд)
-	var cleaned []JSONEntry
-	for _, entry := range jsonStore {
-		if now.Sub(entry.Timestamp) < 2*time.Second {
-			cleaned = append(cleaned, entry)
-		}
-	}
-	jsonStore = cleaned
-
-	// Добавляем новую запись
-	jsonStore = append(jsonStore, JSONEntry{
-		Data:      jsonStr,
-		Timestamp: now,
-	})
-
-	// Формируем массив строк для отправки
-	var data []string
-	for _, entry := range jsonStore {
-		data = append(data, entry.Data)
-	}
-
-	// Отправляем всем клиентам
-	sendJSONUpdateToClients(data)
-}
-
-func sendJSONUpdateToClients(data []string) {
-    msg := struct {
-        Action string   `json:"action"`
-        Data   []string `json:"data"`
-    }{
-        Action: "json_update",
-        Data:   data,
-    }
-
-    // Защищаем доступ к клиентам
-    clientsMutex.Lock()
-    clientsCopy := make([]*websocket.Conn, 0, len(clients))
-    for client := range clients {
-        clientsCopy = append(clientsCopy, client)
-    }
-    clientsMutex.Unlock()
-
-    for _, client := range clientsCopy {
-        if client == nil || client.WriteMessage(websocket.TextMessage, nil) != nil {
-            continue
-        }
-
-        if err := client.WriteJSON(msg); err != nil {
-            log.Printf("Ошибка отправки JSON-обновления клиенту: %v", err)
-        }
-    }
-}
-// ===============================================================
-
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -619,14 +544,13 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	clientInventory[ws] = make(map[string]int)
 	mutex.Unlock()
 
-defer func() {
-    // Удаляем клиента под защитой мьютекса
-    clientsMutex.Lock()
-    delete(clients, ws)
-    delete(clientItems, ws)
-    delete(clientInventory, ws)
-    clientsMutex.Unlock()
-}()
+	defer func() {
+		mutex.Lock()
+		delete(clients, ws)
+		delete(clientItems, ws)
+		delete(clientInventory, ws)
+		mutex.Unlock()
+	}()
 
 	// Отправляем текущие цены при подключении
 	mutex.Lock()
@@ -657,8 +581,6 @@ defer func() {
 			Type      string         `json:"type"`   // для buy/sell
 			Items     map[string]int `json:"items"`  // для presence
 			Inventory map[string]int `json:"inventory"`
-			// Новое поле для сырых JSON-данных
-			JSONData  string         `json:"json_data"` // для действия "add"
 		}
 
 		if err := json.Unmarshal(rawMsg, &msg); err != nil {
@@ -718,17 +640,6 @@ defer func() {
 			}
 			mutex.Unlock()
 
-		// ===== НОВОЕ ДЕЙСТВИЕ "add" =====
-		case "add":
-			// Добавляем JSON-строку в хранилище
-			if msg.JSONData != "" {
-				mutex.Unlock()
-				addJSONData(msg.JSONData)
-			} else {
-				mutex.Unlock()
-			}
-		// ================================
-		
 		default:
 			mutex.Unlock()
 		}
@@ -827,7 +738,6 @@ func adjustPrice(item string) {
 
 	sales := countRecentSales(item, lastUpdate)
 	buys := countRecentBuys(item, lastUpdate)
-	trySales := countRecentTrySells(item, lastUpdate)
 	newPrice := data.Prices[item]
 	priceBefore := newPrice
 	ratioBefore := data.Ratios[item]
@@ -885,8 +795,8 @@ func adjustPrice(item string) {
 	ratio := ratioBefore
 	if sales >= cfg.NormalSales {
 		expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
-		// expectedInventory := 2*math.Sqrt(float64(sales))
-		if sales >= 3 && (float64(buys) > expectedBuys) {
+		expectedInventory := 2*math.Sqrt(float64(sales))
+		if sales >= 3 && (float64(buys) > expectedBuys || float64(expectedInventory) < float64(inventoryCount)) {
 			if ratio == 0.8 {
 				ratio = 0.75
 			}
@@ -912,7 +822,7 @@ func adjustPrice(item string) {
 			allowedStock += 1
 		}
 
-		if currentItemCount > allowedStock || trySales > cfg.NormalSales {
+		if currentItemCount > allowedStock {
 			newPrice -= cfg.PriceStep
 			if newPrice < cfg.MinPrice {
 				newPrice = cfg.MinPrice
@@ -955,40 +865,35 @@ func adjustPrice(item string) {
 }
 
 func sendPriceUpdateToClients() {
-    // Создаем копию данных для отправки
-    var priceData PriceAndRatio
-    mutex.Lock()
-    priceData = PriceAndRatio{
-        Prices: make(map[string]int),
-        Ratios: make(map[string]float64),
-    }
-    for k, v := range data.Prices {
-        priceData.Prices[k] = v
-    }
-    for k, v := range data.Ratios {
-        priceData.Ratios[k] = v
-    }
-    mutex.Unlock()
+	// Создаем копию данных для отправки
+	var priceData PriceAndRatio
+	
+	mutex.Lock()
+	priceData = PriceAndRatio{
+		Prices: make(map[string]int),
+		Ratios: make(map[string]float64),
+	}
+	for k, v := range data.Prices {
+		priceData.Prices[k] = v
+	}
+	for k, v := range data.Ratios {
+		priceData.Ratios[k] = v
+	}
+	mutex.Unlock()
 
-    // Защищаем доступ к клиентам
-    clientsMutex.Lock()
-    clientsCopy := make([]*websocket.Conn, 0, len(clients))
-    for client := range clients {
-        clientsCopy = append(clientsCopy, client)
-    }
-    clientsMutex.Unlock()
+	// Отправляем клиентам
+	mutex.Lock()
+	clientsCopy := make([]*websocket.Conn, 0, len(clients))
+	for client := range clients {
+		clientsCopy = append(clientsCopy, client)
+	}
+	mutex.Unlock()
 
-    for _, client := range clientsCopy {
-        // Проверяем, открыт ли соединение перед отправкой
-        if client == nil || client.WriteMessage(websocket.TextMessage, nil) != nil {
-            continue
-        }
-
-        err := client.WriteJSON(priceData)
-        if err != nil {
-            log.Printf("Ошибка отправки обновления клиенту: %v", err)
-        }
-    }
+	for _, client := range clientsCopy {
+		if err := client.WriteJSON(priceData); err != nil {
+			log.Printf("Ошибка отправки обновления клиенту: %v", err)
+		}
+	}
 }
 
 func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales, expectedSales, buyCount, trySellCount, 
