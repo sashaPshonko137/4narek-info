@@ -574,6 +574,7 @@ func addJSONData(jsonStr string) {
 }
 
 func sendJSONUpdateToClients(data []string) {
+    // Унифицированная структура с action
     msg := struct {
         Action string   `json:"action"`
         Data   []string `json:"data"`
@@ -582,7 +583,6 @@ func sendJSONUpdateToClients(data []string) {
         Data:   data,
     }
 
-    // Защищаем доступ к клиентам
     clientsMutex.Lock()
     clientsCopy := make([]*websocket.Conn, 0, len(clients))
     for client := range clients {
@@ -591,12 +591,17 @@ func sendJSONUpdateToClients(data []string) {
     clientsMutex.Unlock()
 
     for _, client := range clientsCopy {
-        if client == nil || client.WriteMessage(websocket.TextMessage, nil) != nil {
+        if client == nil {
             continue
         }
 
         if err := client.WriteJSON(msg); err != nil {
             log.Printf("Ошибка отправки JSON-обновления клиенту: %v", err)
+            clientsMutex.Lock()
+            delete(clients, client)
+            delete(clientItems, client)
+            delete(clientInventory, client)
+            clientsMutex.Unlock()
         }
     }
 }
@@ -692,6 +697,33 @@ defer func() {
 			// НЕ ОБНОВЛЯЕМ ЦЕНУ - только по таймеру
 
 		case "info":
+    var priceData PriceAndRatio
+    priceData = PriceAndRatio{
+        Prices: make(map[string]int),
+        Ratios: make(map[string]float64),
+    }
+    for k, v := range data.Prices {
+        priceData.Prices[k] = v
+    }
+    for k, v := range data.Ratios {
+        priceData.Ratios[k] = v
+    }
+    mutex.Unlock()
+
+    // Отправляем в унифицированном формате
+    msg := struct {
+        Action string          `json:"action"`
+        Data   PriceAndRatio `json:"data"`
+    }{
+        Action: "price_update",
+        Data:   priceData,
+    }
+
+    err = ws.WriteJSON(msg)
+    if err != nil {
+        log.Printf("write error: %v", err)
+        return
+    }
 			err = ws.WriteJSON(PriceAndRatio{
 				Prices: data.Prices,
 				Ratios: data.Ratios,
@@ -955,7 +987,6 @@ func adjustPrice(item string) {
 }
 
 func sendPriceUpdateToClients() {
-    // Создаем копию данных для отправки
     var priceData PriceAndRatio
     mutex.Lock()
     priceData = PriceAndRatio{
@@ -970,7 +1001,15 @@ func sendPriceUpdateToClients() {
     }
     mutex.Unlock()
 
-    // Защищаем доступ к клиентам
+    // Создаем унифицированную структуру с action
+    msg := struct {
+        Action string          `json:"action"`
+        Data   PriceAndRatio `json:"data"`
+    }{
+        Action: "price_update", // Уникальный идентификатор типа сообщения
+        Data:   priceData,
+    }
+
     clientsMutex.Lock()
     clientsCopy := make([]*websocket.Conn, 0, len(clients))
     for client := range clients {
@@ -979,17 +1018,21 @@ func sendPriceUpdateToClients() {
     clientsMutex.Unlock()
 
     for _, client := range clientsCopy {
-        // Проверяем, открыт ли соединение перед отправкой
-        if client == nil || client.WriteMessage(websocket.TextMessage, nil) != nil {
+        if client == nil {
             continue
         }
 
-        err := client.WriteJSON(priceData)
-        if err != nil {
+        if err := client.WriteJSON(msg); err != nil {
             log.Printf("Ошибка отправки обновления клиенту: %v", err)
+            clientsMutex.Lock()
+            delete(clients, client)
+            delete(clientItems, client)
+            delete(clientInventory, client)
+            clientsMutex.Unlock()
         }
     }
 }
+
 
 func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales, expectedSales, buyCount, trySellCount, 
                                 oldPrice, oldRatio, newPrice, newRatio float64) {
