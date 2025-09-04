@@ -26,6 +26,7 @@ type PriceAndRatio struct {
 	Prices map[string]int     `json:"prices"`
 	Ratios map[string]float64 `json:"ratios"`
 }
+var clientsMutex sync.Mutex
 
 var (
 	upgrader = websocket.Upgrader{
@@ -573,27 +574,31 @@ func addJSONData(jsonStr string) {
 }
 
 func sendJSONUpdateToClients(data []string) {
-	// Создаем сообщение, которое клиенты поймут как обновление данных
-	msg := struct {
-		Action string   `json:"action"`
-		Data   []string `json:"data"`
-	}{
-		Action: "json_update", // Специальное действие для клиентов
-		Data:   data,
-	}
+    msg := struct {
+        Action string   `json:"action"`
+        Data   []string `json:"data"`
+    }{
+        Action: "json_update",
+        Data:   data,
+    }
 
-	mutex.Lock()
-	clientsCopy := make([]*websocket.Conn, 0, len(clients))
-	for client := range clients {
-		clientsCopy = append(clientsCopy, client)
-	}
-	mutex.Unlock()
+    // Защищаем доступ к клиентам
+    clientsMutex.Lock()
+    clientsCopy := make([]*websocket.Conn, 0, len(clients))
+    for client := range clients {
+        clientsCopy = append(clientsCopy, client)
+    }
+    clientsMutex.Unlock()
 
-	for _, client := range clientsCopy {
-		if err := client.WriteJSON(msg); err != nil {
-			log.Printf("Ошибка отправки JSON-обновления клиенту: %v", err)
-		}
-	}
+    for _, client := range clientsCopy {
+        if client == nil || client.WriteMessage(websocket.TextMessage, nil) != nil {
+            continue
+        }
+
+        if err := client.WriteJSON(msg); err != nil {
+            log.Printf("Ошибка отправки JSON-обновления клиенту: %v", err)
+        }
+    }
 }
 // ===============================================================
 
@@ -614,13 +619,14 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	clientInventory[ws] = make(map[string]int)
 	mutex.Unlock()
 
-	defer func() {
-		mutex.Lock()
-		delete(clients, ws)
-		delete(clientItems, ws)
-		delete(clientInventory, ws)
-		mutex.Unlock()
-	}()
+defer func() {
+    // Удаляем клиента под защитой мьютекса
+    clientsMutex.Lock()
+    delete(clients, ws)
+    delete(clientItems, ws)
+    delete(clientInventory, ws)
+    clientsMutex.Unlock()
+}()
 
 	// Отправляем текущие цены при подключении
 	mutex.Lock()
@@ -949,35 +955,40 @@ func adjustPrice(item string) {
 }
 
 func sendPriceUpdateToClients() {
-	// Создаем копию данных для отправки
-	var priceData PriceAndRatio
-	
-	mutex.Lock()
-	priceData = PriceAndRatio{
-		Prices: make(map[string]int),
-		Ratios: make(map[string]float64),
-	}
-	for k, v := range data.Prices {
-		priceData.Prices[k] = v
-	}
-	for k, v := range data.Ratios {
-		priceData.Ratios[k] = v
-	}
-	mutex.Unlock()
+    // Создаем копию данных для отправки
+    var priceData PriceAndRatio
+    mutex.Lock()
+    priceData = PriceAndRatio{
+        Prices: make(map[string]int),
+        Ratios: make(map[string]float64),
+    }
+    for k, v := range data.Prices {
+        priceData.Prices[k] = v
+    }
+    for k, v := range data.Ratios {
+        priceData.Ratios[k] = v
+    }
+    mutex.Unlock()
 
-	// Отправляем клиентам
-	mutex.Lock()
-	clientsCopy := make([]*websocket.Conn, 0, len(clients))
-	for client := range clients {
-		clientsCopy = append(clientsCopy, client)
-	}
-	mutex.Unlock()
+    // Защищаем доступ к клиентам
+    clientsMutex.Lock()
+    clientsCopy := make([]*websocket.Conn, 0, len(clients))
+    for client := range clients {
+        clientsCopy = append(clientsCopy, client)
+    }
+    clientsMutex.Unlock()
 
-	for _, client := range clientsCopy {
-		if err := client.WriteJSON(priceData); err != nil {
-			log.Printf("Ошибка отправки обновления клиенту: %v", err)
-		}
-	}
+    for _, client := range clientsCopy {
+        // Проверяем, открыт ли соединение перед отправкой
+        if client == nil || client.WriteMessage(websocket.TextMessage, nil) != nil {
+            continue
+        }
+
+        err := client.WriteJSON(priceData)
+        if err != nil {
+            log.Printf("Ошибка отправки обновления клиенту: %v", err)
+        }
+    }
 }
 
 func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales, expectedSales, buyCount, trySellCount, 
