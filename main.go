@@ -141,12 +141,23 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Инициализация бота Telegram с опциями
+	
 	b, err := bot.New(token)
 	if err != nil {
 		log.Printf("Error creating bot: %v", err)
 		os.Exit(1)
 	}
 	tgBot = b
+
+	// Проверка работы бота
+	ctx := context.Background()
+	_, err = tgBot.GetMe(ctx)
+	if err != nil {
+		log.Printf("Error checking bot: %v", err)
+		os.Exit(1)
+	}
+	log.Println("Bot initialized successfully")
 
 	loadDailyData(loc)
 
@@ -362,8 +373,27 @@ func adjustPrice(item string, onHand, inInventory int) {
 
 		sendPriceUpdateToClients()
 		log.Printf("[PRICE] %s: цена изменена с %d на %d", item, priceBefore, newPrice)
+		
+		// Отправляем уведомление в Telegram об изменении цены
+		go sendPriceChangeNotification(item, priceBefore, newPrice, ratioBefore, ratio)
 	} else {
 		dataMutex.Unlock()
+	}
+}
+
+func sendPriceChangeNotification(item string, oldPrice, newPrice int, oldRatio, newRatio float64) {
+	ctx := context.Background()
+	message := fmt.Sprintf(
+		"📈 Изменение цены\n\n🔹 %s\n💰 Цена: %d → %d\n🧮 Коэффициент: %.2f → %.2f\n⏰ Время: %s",
+		item, oldPrice, newPrice, oldRatio, newRatio, time.Now().Format("2006-01-02 15:04:05"),
+	)
+	
+	_, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:    chatID,
+		Text:      message,
+	})
+	if err != nil {
+		log.Printf("[Telegram] Ошибка при отправке уведомления об изменении цены: %v", err)
 	}
 }
 
@@ -652,13 +682,8 @@ func sendPriceUpdateToClients() {
 	dataMutex.RUnlock()
 
 	clientsMutex.RLock()
-	clientsCopy := make([]*websocket.Conn, 0, len(clients))
+	defer clientsMutex.RUnlock()
 	for client := range clients {
-		clientsCopy = append(clientsCopy, client)
-	}
-	clientsMutex.RUnlock()
-
-	for _, client := range clientsCopy {
 		err := client.WriteJSON(priceData)
 		if err != nil {
 			log.Printf("Ошибка отправки обновления клиенту: %v", err)
