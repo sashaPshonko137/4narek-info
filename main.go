@@ -92,7 +92,7 @@ var (
 
 	itemsConfig = map[string]ItemConfig{
 		"sword6": {
-			BasePrice:    1500002,
+			BasePrice:    3000002,
 			NormalSales:  1,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -101,7 +101,7 @@ var (
 			Type:         "netherite_sword",
 		},
 		"sword7": {
-			BasePrice:    2000003,
+			BasePrice:    5000003,
 			NormalSales:  8,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -110,7 +110,7 @@ var (
 			Type:         "netherite_sword",
 		},
 		"sword5-unbreak": {
-			BasePrice:    1000004,
+			BasePrice:    2600004,
 			NormalSales:  10,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -119,7 +119,7 @@ var (
 			Type:         "netherite_sword",
 		},
 		"megasword": {
-			BasePrice:    3300008,
+			BasePrice:    6200008,
 			NormalSales:  2,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
