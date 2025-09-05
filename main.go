@@ -18,7 +18,7 @@ import (
 
 const (
 	token    = "7209712528:AAF7o20ysTcpgQb8JlVH4_CLmqH_iz5GiL8"
-	chatID   = -4709535234
+	chatID   = -4709535234 // Ваш чат ID
 	timezone = "Asia/Tashkent"
 )
 
@@ -27,29 +27,30 @@ type PriceAndRatio struct {
 	Ratios map[string]float64 `json:"ratios"`
 }
 
-type Data struct {
-	Prices       map[string]int
-	Ratios       map[string]float64
-	BuyStats     map[string]int
-	SellStats    map[string]int
-	TrySellStats map[string]int
-	LastTrade    map[string]time.Time
-	TradeHistory map[string][]TradeLog
+var (
+	upgrader = websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool { return true },
+	}
+	tgBot *bot.Bot
+)
+
+var (
+	clientItems     = make(map[*websocket.Conn]map[string]int)
+	clientInventory = make(map[*websocket.Conn]map[string]int)
+)
+
+var itemLimit = map[string]int{
+	"netherite_sword": 24*3,
+	// "elytra":          24,
+	// "gunpowder":       8,
+	// "netherite_chestplate": 24,
 }
 
-type TradeLog struct {
-	Time time.Time
-	Type string
-}
-
-type DailyData struct {
-	Date         string             `json:"date"`
-	Prices       map[string]int     `json:"prices"`
-	Ratios       map[string]float64 `json:"ratios"`
-	BuyStats     map[string]int     `json:"buy_stats"`
-	SellStats    map[string]int     `json:"sell_stats"`
-	TrySellStats map[string]int     `json:"try_sell_stats"`
-	MessageID    int                `json:"message_id"`
+var inventoryLimit = map[string]int{
+	"netherite_sword": 28*3*3,
+	// "elytra":          28 * 3,
+	// "gunpowder":       28,
+	// "netherite_chestplate": 28*3,
 }
 
 type ItemConfig struct {
@@ -62,37 +63,20 @@ type ItemConfig struct {
 	Type         string
 }
 
-type ClientData struct {
-	Items     map[string]int
-	Inventory map[string]int
-	Mutex     sync.Mutex
+type DailyData struct {
+	Date         string             `json:"date"`
+	Prices       map[string]int     `json:"prices"`
+	Ratios       map[string]float64 `json:"ratios"`
+	BuyStats     map[string]int     `json:"buy_stats"`
+	SellStats    map[string]int     `json:"sell_stats"`
+	TrySellStats map[string]int     `json:"try_sell_stats"`
+	MessageID    int                `json:"message_id"`
 }
 
 var (
-	upgrader = websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool { return true },
-	}
-	tgBot *bot.Bot
-
-	dataMutex    sync.RWMutex
-	clientsMutex sync.RWMutex
-	dailyMutex   sync.RWMutex
-
-	data = &Data{
-		Prices:       make(map[string]int),
-		Ratios:       make(map[string]float64),
-		BuyStats:     make(map[string]int),
-		SellStats:    make(map[string]int),
-		TrySellStats: make(map[string]int),
-		LastTrade:    make(map[string]time.Time),
-		TradeHistory: make(map[string][]TradeLog),
-	}
-
-	clients = make(map[*websocket.Conn]*ClientData)
-
 	itemsConfig = map[string]ItemConfig{
 		"sword6": {
-			BasePrice:    3000002,
+			BasePrice:    1500002,
 			NormalSales:  1,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -101,7 +85,7 @@ var (
 			Type:         "netherite_sword",
 		},
 		"sword7": {
-			BasePrice:    5000003,
+			BasePrice:    2000003,
 			NormalSales:  8,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -110,7 +94,7 @@ var (
 			Type:         "netherite_sword",
 		},
 		"sword5-unbreak": {
-			BasePrice:    2600004,
+			BasePrice:    1000004,
 			NormalSales:  10,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -119,7 +103,7 @@ var (
 			Type:         "netherite_sword",
 		},
 		"megasword": {
-			BasePrice:    6200008,
+			BasePrice:    3300008,
 			NormalSales:  2,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -128,10 +112,45 @@ var (
 			Type:         "netherite_sword",
 		},
 	}
+)
 
-	swordTimes      = make(map[string]time.Time)
-	currentDay      string
-	dailyData       DailyData
+type TradeLog struct {
+	Time time.Time
+	Type string // "buy", "sell" или "try-sell"
+}
+
+type Data struct {
+	Prices       map[string]int
+	Ratios       map[string]float64
+	BuyStats     map[string]int
+	SellStats    map[string]int
+	TrySellStats map[string]int
+	LastTrade    map[string]time.Time
+	TradeHistory map[string][]TradeLog
+}
+
+// ===== НОВАЯ СТРУКТУРА ДЛЯ ВРЕМЕННОГО ХРАНИЛИЩА JSON =====
+type JSONEntry struct {
+	Data      string    // Храним именно строку, а не парсенный JSON
+	Timestamp time.Time
+}
+
+var (
+	jsonStore  []JSONEntry
+	storeMutex sync.Mutex
+)
+// =======================================================
+
+var (
+	data   = &Data{}
+	mutex  = sync.Mutex{} // Единственный мьютекс для всей системы
+	clients = make(map[*websocket.Conn]bool)
+
+	currentDay string
+	dailyData  DailyData
+
+	swordTimes = make(map[string]time.Time)
+
 	lastPriceUpdate = make(map[string]time.Time)
 )
 
@@ -142,6 +161,7 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Инициализация бота Telegram
 	b, err := bot.New(token)
 	if err != nil {
 		log.Printf("Error creating bot: %v", err)
@@ -149,38 +169,50 @@ func main() {
 	}
 	tgBot = b
 
-	ctx := context.Background()
-	_, err = tgBot.GetMe(ctx)
-	if err != nil {
-		log.Printf("Error checking bot: %v", err)
-		os.Exit(1)
-	}
-	log.Println("Bot initialized successfully")
+	// Инициализация данных
+	data.Prices = make(map[string]int)
+	data.BuyStats = make(map[string]int)
+	data.SellStats = make(map[string]int)
+	data.TrySellStats = make(map[string]int)
+	data.LastTrade = make(map[string]time.Time)
+	data.TradeHistory = make(map[string][]TradeLog)
+	data.Ratios = make(map[string]float64)
 
+	// Загрузка данных за сегодня
 	loadDailyData(loc)
 
+	// WebSocket сервер
 	http.HandleFunc("/ws", handleConnections)
+	
 	go func() {
 		log.Println("Server started on :8080")
 		log.Print(http.ListenAndServe(":8080", nil))
 	}()
 
+	// Проверка смены дня
 	go checkDayChange(loc)
+
+	// Запускаем таймеры для каждого предмета
 	go startItemTimers()
 
 	select {}
 }
 
+func getConnectedClientsCount() int {
+	mutex.Lock()
+	defer mutex.Unlock()
+	return len(clients)
+}
+
 func loadDailyData(loc *time.Location) {
-	dailyMutex.Lock()
-	defer dailyMutex.Unlock()
-	dataMutex.Lock()
-	defer dataMutex.Unlock()
+	mutex.Lock()
+	defer mutex.Unlock()
 
 	today := time.Now().In(loc).Format("2006-01-02")
 	currentDay = today
 	filename := fmt.Sprintf("data_%s.json", today)
 
+	// Инициализация данных
 	dailyData = DailyData{
 		Date:         today,
 		Prices:       make(map[string]int),
@@ -190,8 +222,10 @@ func loadDailyData(loc *time.Location) {
 		Ratios:       make(map[string]float64),
 	}
 
+	// Загрузка из файла, если он существует и за сегодня
 	if file, err := os.ReadFile(filename); err == nil {
 		if err := json.Unmarshal(file, &dailyData); err == nil && dailyData.Date == today {
+			// Копируем данные из сохраненных данных
 			for item, price := range dailyData.Prices {
 				data.Prices[item] = price
 			}
@@ -211,6 +245,7 @@ func loadDailyData(loc *time.Location) {
 		}
 	}
 
+	// Устанавливаем базовые цены для новых предметов
 	for item, cfg := range itemsConfig {
 		if _, exists := data.Prices[item]; !exists {
 			data.Prices[item] = cfg.BasePrice
@@ -222,10 +257,13 @@ func loadDailyData(loc *time.Location) {
 		}
 	}
 
+	// Инициализация времени последнего обновления
 	for item := range itemsConfig {
+		// Устанавливаем время последнего обновления на начало AnalysisTime периода
 		swordTimes[item] = time.Now().Add(-itemsConfig[item].AnalysisTime)
 	}
 
+	// Сохраняем данные
 	saveDailyDataNoMessageUpdate()
 }
 
@@ -234,235 +272,79 @@ func startItemTimers() {
 		go func(item string, cfg ItemConfig) {
 			log.Printf("[TIMER] Запущен таймер для %s (интервал: %v)", item, cfg.AnalysisTime)
 			
+			// Первый запуск через короткую задержку, чтобы не все предметы начали одновременно
 			time.Sleep(time.Duration(len(itemsConfig)-1) * time.Second)
 			
+			// Создаем тикер с интервалом AnalysisTime
 			ticker := time.NewTicker(cfg.AnalysisTime)
 			defer ticker.Stop()
 
 			for {
 				select {
 				case <-ticker.C:
-					startTime := time.Now().Add(-cfg.AnalysisTime)
-					
-					// Получаем статистику за предыдущий период
-					sales, buys, trySells, oldPrice, oldRatio := getItemStatsForReporting(item, startTime)
-					onHand, inInventory := getItemAndInventoryCount(item)
-					
-					// Логируем начало анализа
-					log.Printf("[ANALYSIS] %s: анализ с %s по %s. Продажи: %d (норма: %d)", 
-						item, startTime.Format("15:04:05"), time.Now().Format("15:04:05"), sales, cfg.NormalSales)
-					
-					// Обновляем цену
-					adjustPrice(item, onHand, inInventory)
-					
-					// Получаем новые данные после обновления
-					newPrice, newRatio := getCurrentPriceAndRatio(item)
-					
-					// Отправляем статистику за предыдущий период
-					go sendIntervalStatsToTelegram(
-						item,
-						startTime, time.Now(),
-						float64(sales), float64(cfg.NormalSales), float64(buys), float64(trySells),
-						float64(oldPrice), oldRatio, float64(newPrice), newRatio,
-					)
+					adjustAndReport(item, cfg)
 				}
 			}
 		}(item, cfg)
 	}
 }
 
-func getCurrentPriceAndRatio(item string) (int, float64) {
-	dataMutex.RLock()
-	defer dataMutex.RUnlock()
-	return data.Prices[item], data.Ratios[item]
-}
-
-func getItemAndInventoryCount(item string) (int, int) {
-	clientsMutex.RLock()
-	defer clientsMutex.RUnlock()
-
-	onHand := 0
-	inInventory := 0
-	for _, clientData := range clients {
-		clientData.Mutex.Lock()
-		onHand += clientData.Items[item]
-		inInventory += clientData.Inventory[item]
-		clientData.Mutex.Unlock()
-	}
-	return onHand, inInventory
-}
-
-func adjustPrice(item string, onHand, inInventory int) {
-	cfg, ok := itemsConfig[item]
-	if !ok {
-		return
-	}
-
-	dataMutex.Lock()
-	defer dataMutex.Unlock()
-
-	now := time.Now()
-	lastUpdate := now.Add(-cfg.AnalysisTime)
-	swordTimes[item] = now
-
-	sales := countRecentSalesLocked(item, lastUpdate)
-	buys := countRecentBuysLocked(item, lastUpdate)
-	newPrice := data.Prices[item]
-	priceBefore := newPrice
-	ratioBefore := data.Ratios[item]
-
-	salesRate := float64(cfg.NormalSales) / cfg.AnalysisTime.Minutes()
-	totalSalesRate := 0.0
-
-	for _, otherCfg := range itemsConfig {
-		if otherCfg.Type == cfg.Type {
-			totalSalesRate += float64(otherCfg.NormalSales) / otherCfg.AnalysisTime.Minutes()
-		}
-	}
-	if totalSalesRate == 0 {
-		totalSalesRate = 1
-	}
-	itemShare := salesRate / totalSalesRate
-
-	maxSlots := 24 * 3
-	allocatedSlots := int(math.Round(itemShare * float64(maxSlots)))
-	if allocatedSlots < 1 {
-		allocatedSlots = 1
-	}
-
-	inventoryLimit := 28 * 3 * 3
-	inventoryFreeSlots := inventoryLimit - inInventory
-	freeSlots := maxSlots - (onHand)
-
-	ratio := ratioBefore
-	if sales >= cfg.NormalSales {
-		expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
-		expectedInventory := 2 * math.Sqrt(float64(sales))
-		if sales >= 3 && (float64(buys) > expectedBuys || float64(expectedInventory) < float64(inInventory)) {
-			if ratio == 0.8 {
-				ratio = 0.75
-			}
-		} else if (buys < cfg.NormalSales) && inventoryFreeSlots > cfg.NormalSales {
-			if ratio == 0.75 {
-				ratio = 0.8
-			} else {
-				if freeSlots < allocatedSlots {
-					return
-				}
-				newPrice += cfg.PriceStep
-				if newPrice > cfg.MaxPrice {
-					newPrice = cfg.MaxPrice
-				}
-			}
-		}
-	} else {
-		allowedStock := cfg.NormalSales
-		if cfg.NormalSales <= 1 {
-			allowedStock += 2
-		} else if cfg.NormalSales <= 3 {
-			allowedStock += 1
-		}
-
-		if onHand > allowedStock {
-			newPrice -= cfg.PriceStep
-			if newPrice < cfg.MinPrice {
-				newPrice = cfg.MinPrice
-			}
-		} else if inventoryFreeSlots > cfg.NormalSales {
-			if freeSlots < allocatedSlots {
-				return
-			}
-			if ratio == 0.75 {
-				ratio = 0.8
-			} else if buys < cfg.NormalSales {
-				newPrice += cfg.PriceStep
-				if newPrice > cfg.MaxPrice {
-					newPrice = cfg.MaxPrice
-				}
-			}
-		}
-	}
-
-	if newPrice != priceBefore || ratio != ratioBefore {
-		data.Prices[item] = newPrice
-		data.Ratios[item] = ratio
-		lastPriceUpdate[item] = now
-
-		go func() {
-			dailyMutex.Lock()
-			dailyData.Prices[item] = newPrice
-			dailyData.Ratios[item] = ratio
-			saveDailyDataNoMessageUpdate()
-			dailyMutex.Unlock()
-		}()
-
-		sendPriceUpdateToClients()
-		log.Printf("[PRICE] %s: цена изменена с %d на %d", item, priceBefore, newPrice)
-		
-		go sendPriceChangeNotification(item, priceBefore, newPrice, ratioBefore, ratio)
-	}
-}
-
-func sendPriceChangeNotification(item string, oldPrice, newPrice int, oldRatio, newRatio float64) {
-	ctx := context.Background()
-	message := fmt.Sprintf(
-		"📈 Изменение цены\n\n🔹 %s\n💰 Цена: %d → %d\n🧮 Коэффициент: %.2f → %.2f\n⏰ Время: %s",
-		item, oldPrice, newPrice, oldRatio, newRatio, time.Now().Format("2006-01-02 15:04:05"),
-	)
+func getItemStatsForReporting(item string, since time.Time) (sales, buys, trySells, price int, ratio float64) {
+	mutex.Lock()
+	defer mutex.Unlock()
 	
-	_, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:    chatID,
-		Text:      message,
-	})
-	if err != nil {
-		log.Printf("[Telegram] Ошибка при отправке уведомления об изменении цены: %v", err)
-	}
+	sales = countRecentSales(item, since)
+	buys = countRecentBuys(item, since)
+	trySells = countRecentTrySells(item, since)
+	price = data.Prices[item]
+	ratio = data.Ratios[item]
+	
+	return
 }
 
-func countRecentSalesLocked(item string, since time.Time) int {
-	count := 0
-	for _, trade := range data.TradeHistory[item] {
-		if trade.Type == "sell" && trade.Time.After(since) {
-			count++
-		}
-	}
-	return count
+func getInventoryStats(item string) (onHand, inInventory int) {
+	mutex.Lock()
+	defer mutex.Unlock()
+	
+	onHand = getItemCount(item)
+	inInventory = getInventoryCount(item)
+	
+	return
 }
 
-func countRecentBuysLocked(item string, since time.Time) int {
-	count := 0
-	for _, trade := range data.TradeHistory[item] {
-		if trade.Type == "buy" && trade.Time.After(since) {
-			count++
-		}
-	}
-	return count
-}
-
-func countRecentTrySellsLocked(item string, since time.Time) int {
-	count := 0
-	for _, trade := range data.TradeHistory[item] {
-		if trade.Type == "try-sell" && trade.Time.After(since) {
-			count++
-		}
-	}
-	return count
-}
-
-func getItemStatsForReporting(item string, since time.Time) (int, int, int, int, float64) {
-	dataMutex.RLock()
-	defer dataMutex.RUnlock()
-
-	sales := countRecentSalesLocked(item, since)
-	buys := countRecentBuysLocked(item, since)
-	trySells := countRecentTrySellsLocked(item, since)
-	price := data.Prices[item]
-	ratio := data.Ratios[item]
-
-	return sales, buys, trySells, price, ratio
+func adjustAndReport(item string, cfg ItemConfig) {
+	// Определяем период анализа
+	now := time.Now()
+	start := now.Add(-cfg.AnalysisTime)
+	
+	// Получаем статистику за предыдущий период
+	sales, buys, trySells, price, ratio := getItemStatsForReporting(item, start)
+	
+	// Логируем начало анализа
+	log.Printf("[ANALYSIS] %s: анализ с %s по %s. Продажи: %d (норма: %d)", 
+		item, start.Format("15:04:05"), now.Format("15:04:05"), sales, cfg.NormalSales)
+	
+	// Обновляем цену на основе статистики
+	adjustPrice(item)
+	
+	// Получаем текущие данные после обновления
+	newPrice, newRatio := func() (int, float64) {
+		mutex.Lock()
+		defer mutex.Unlock()
+		return data.Prices[item], data.Ratios[item]
+	}()
+	
+	// Отправляем статистику за ПРЕДЫДУЩИЙ период
+	sendIntervalStatsToTelegram(
+		item,
+		start, now,
+		float64(sales), float64(cfg.NormalSales), float64(buys), float64(trySells),
+		float64(price), ratio, float64(newPrice), newRatio,
+	)
 }
 
 func saveDailyDataNoMessageUpdate() {
+	// Эта функция вызывается с уже заблокированным mutex
 	today := currentDay
 	if today == "" {
 		return
@@ -485,30 +367,6 @@ func saveDailyDataNoMessageUpdate() {
 		log.Printf("Ошибка записи файла: %v", err)
 		return
 	}
-}
-
-func updateTelegramMessageSimple() {
-	dataMutex.RLock()
-	prices := make(map[string]int)
-	buyStats := make(map[string]int)
-	sellStats := make(map[string]int)
-	for k, v := range data.Prices {
-		prices[k] = v
-	}
-	for k, v := range data.BuyStats {
-		buyStats[k] = v
-	}
-	for k, v := range data.SellStats {
-		sellStats[k] = v
-	}
-	dataMutex.RUnlock()
-
-	dailyMutex.RLock()
-	date := dailyData.Date
-	messageID := dailyData.MessageID
-	dailyMutex.RUnlock()
-
-	updateTelegramMessageWithoutLocks(prices, buyStats, sellStats, date, messageID)
 }
 
 func updateTelegramMessageWithoutLocks(prices, buyStats, sellStats map[string]int, date string, messageID int) {
@@ -548,6 +406,7 @@ func updateTelegramMessageWithoutLocks(prices, buyStats, sellStats map[string]in
 		if err != nil {
 			log.Printf("[Telegram error] Не удалось обновить сообщение: %v", err)
 
+			// Попробуем отправить заново, если редактирование не удалось
 			msg, sendErr := tgBot.SendMessage(ctx, &bot.SendMessageParams{
 				ChatID: chatID,
 				Text:   msgText,
@@ -561,12 +420,37 @@ func updateTelegramMessageWithoutLocks(prices, buyStats, sellStats map[string]in
 		}
 	}
 
+	// Обновляем messageID если он изменился
 	if newMessageID != 0 {
-		dailyMutex.Lock()
+		mutex.Lock()
 		dailyData.MessageID = newMessageID
 		saveDailyDataNoMessageUpdate()
-		dailyMutex.Unlock()
+		mutex.Unlock()
 	}
+}
+
+func updateTelegramMessageSimple() {
+	mutex.Lock()
+	// Создаем копии данных для использования вне блокировки
+	prices := make(map[string]int)
+	buyStats := make(map[string]int)
+	sellStats := make(map[string]int)
+	date := dailyData.Date
+	messageID := dailyData.MessageID
+
+	for k, v := range data.Prices {
+		prices[k] = v
+	}
+	for k, v := range data.BuyStats {
+		buyStats[k] = v
+	}
+	for k, v := range data.SellStats {
+		sellStats[k] = v
+	}
+	mutex.Unlock()
+
+	// Обновляем Telegram сообщение
+	updateTelegramMessageWithoutLocks(prices, buyStats, sellStats, date, messageID)
 }
 
 func checkDayChange(loc *time.Location) {
@@ -576,13 +460,97 @@ func checkDayChange(loc *time.Location) {
 		nextDay = time.Date(nextDay.Year(), nextDay.Month(), nextDay.Day(), 0, 0, 0, 0, loc)
 		time.Sleep(time.Until(nextDay))
 
-		dailyMutex.Lock()
-		saveDailyDataNoMessageUpdate()
-		dailyMutex.Unlock()
+		// Новый день - сохраняем данные и создаем новое сообщение
+		mutex.Lock()
+		saveDailyData()
+		mutex.Unlock()
 
-		loadDailyData(loc)
+		loadDailyData(loc) // Перезагружаем данные для нового дня
 	}
 }
+
+func saveDailyData() {
+	// Эта функция вызывается с уже заблокированным mutex
+	today := currentDay
+	if today == "" {
+		return
+	}
+
+	filename := fmt.Sprintf("data_%s.json", today)
+	dailyData.Prices = data.Prices
+	dailyData.BuyStats = data.BuyStats
+	dailyData.SellStats = data.SellStats
+	dailyData.TrySellStats = data.TrySellStats
+	dailyData.Ratios = data.Ratios
+
+	file, err := json.MarshalIndent(dailyData, "", "  ")
+	if err != nil {
+		log.Printf("Ошибка сохранения данных: %v", err)
+		return
+	}
+
+	if err := os.WriteFile(filename, file, 0644); err != nil {
+		log.Printf("Ошибка записи файла: %v", err)
+		return
+	}
+}
+
+// ===== НОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С ВРЕМЕННЫМ ХРАНИЛИЩЕМ JSON =====
+func addJSONData(jsonStr string) {
+	storeMutex.Lock()
+	defer storeMutex.Unlock()
+
+	now := time.Now()
+	
+	// Очистка старых записей (старше 2 секунд)
+	var cleaned []JSONEntry
+	for _, entry := range jsonStore {
+		if now.Sub(entry.Timestamp) < 2*time.Second {
+			cleaned = append(cleaned, entry)
+		}
+	}
+	jsonStore = cleaned
+
+	// Добавляем новую запись
+	jsonStore = append(jsonStore, JSONEntry{
+		Data:      jsonStr,
+		Timestamp: now,
+	})
+
+	// Формируем массив строк для отправки
+	var data []string
+	for _, entry := range jsonStore {
+		data = append(data, entry.Data)
+	}
+
+	// Отправляем всем клиентам
+	sendJSONUpdateToClients(data)
+}
+
+func sendJSONUpdateToClients(data []string) {
+	// Создаем сообщение, которое клиенты поймут как обновление данных
+	msg := struct {
+		Action string   `json:"action"`
+		Data   []string `json:"data"`
+	}{
+		Action: "json_update", // Специальное действие для клиентов
+		Data:   data,
+	}
+
+	mutex.Lock()
+	clientsCopy := make([]*websocket.Conn, 0, len(clients))
+	for client := range clients {
+		clientsCopy = append(clientsCopy, client)
+	}
+	mutex.Unlock()
+
+	for _, client := range clientsCopy {
+		if err := client.WriteJSON(msg); err != nil {
+			log.Printf("Ошибка отправки JSON-обновления клиенту: %v", err)
+		}
+	}
+}
+// ===============================================================
 
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
@@ -592,47 +560,54 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
-	clientData := &ClientData{
-		Items:     make(map[string]int),
-		Inventory: make(map[string]int),
-	}
+	mutex.Lock()
+	clients[ws] = true
+	mutex.Unlock()
 
-	clientsMutex.Lock()
-	clients[ws] = clientData
-	clientsMutex.Unlock()
+	mutex.Lock()
+	clientItems[ws] = make(map[string]int)
+	clientInventory[ws] = make(map[string]int)
+	mutex.Unlock()
 
 	defer func() {
-		clientsMutex.Lock()
+		mutex.Lock()
 		delete(clients, ws)
-		clientsMutex.Unlock()
+		delete(clientItems, ws)
+		delete(clientInventory, ws)
+		mutex.Unlock()
 	}()
 
-	dataMutex.RLock()
+	// Отправляем текущие цены при подключении
+	mutex.Lock()
 	err = ws.WriteJSON(PriceAndRatio{
 		Prices: data.Prices,
 		Ratios: data.Ratios,
 	})
-	dataMutex.RUnlock()
-	
+	mutex.Unlock()
 	if err != nil {
 		log.Printf("write error: %v", err)
 		return
 	}
 
 	for {
+		// Читаем сырые данные
 		_, rawMsg, err := ws.ReadMessage()
 		if err != nil {
 			log.Printf("read error: %v", err)
 			break
 		}
 
+		// Логируем входящий JSON
 		log.Printf("[WS incoming] %s", string(rawMsg))
 
+		// Парсим JSON в структуру
 		var msg struct {
 			Action    string         `json:"action"`
-			Type      string         `json:"type"`
-			Items     map[string]int `json:"items"`
+			Type      string         `json:"type"`   // для buy/sell
+			Items     map[string]int `json:"items"`  // для presence
 			Inventory map[string]int `json:"inventory"`
+			// Новое поле для сырых JSON-данных
+			JSONData  string         `json:"json_data"` // для действия "add"
 		}
 
 		if err := json.Unmarshal(rawMsg, &msg); err != nil {
@@ -640,73 +615,300 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		mutex.Lock()
 		switch msg.Action {
 		case "buy":
-			dataMutex.Lock()
 			data.BuyStats[msg.Type]++
 			data.LastTrade[msg.Type] = time.Now()
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "buy"})
-			dataMutex.Unlock()
-
-			go func() {
-				dailyMutex.Lock()
-				saveDailyDataNoMessageUpdate()
-				dailyMutex.Unlock()
-			}()
+			mutex.Unlock()
+			// НЕ ОБНОВЛЯЕМ ЦЕНУ - только по таймеру
 
 		case "sell":
-			dataMutex.Lock()
 			data.SellStats[msg.Type]++
 			data.LastTrade[msg.Type] = time.Now()
 			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "sell"})
-			dataMutex.Unlock()
-
-			go func() {
-				dailyMutex.Lock()
-				saveDailyDataNoMessageUpdate()
-				dailyMutex.Unlock()
-			}()
+			mutex.Unlock()
+			// НЕ ОБНОВЛЯЕМ ЦЕНУ - только по таймеру
 
 		case "try-sell":
-			dataMutex.Lock()
 			data.TrySellStats[msg.Type]++
 			data.LastTrade[msg.Type] = time.Now()
-			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{Time: time.Now(), Type: "try-sell"})
-			dataMutex.Unlock()
-
-			go func() {
-				dailyMutex.Lock()
-				saveDailyDataNoMessageUpdate()
-				dailyMutex.Unlock()
-			}()
+			data.TradeHistory[msg.Type] = append(data.TradeHistory[msg.Type], TradeLog{
+				Time: time.Now(), Type: "try-sell",
+			})
+			mutex.Unlock()
+			// НЕ ОБНОВЛЯЕМ ЦЕНУ - только по таймеру
 
 		case "info":
-			dataMutex.RLock()
 			err = ws.WriteJSON(PriceAndRatio{
 				Prices: data.Prices,
 				Ratios: data.Ratios,
 			})
-			dataMutex.RUnlock()
-			
+			mutex.Unlock()
 			if err != nil {
 				log.Printf("write error: %v", err)
 				return
 			}
 
 		case "presence":
-			clientsMutex.Lock()
-			clientData.Mutex.Lock()
-			clientData.Items = msg.Items
-			clientData.Inventory = msg.Inventory
-			clientData.Mutex.Unlock()
-			clientsMutex.Unlock()
+			clientItems[ws] = make(map[string]int)
+			clientInventory[ws] = make(map[string]int)
+
+			for item, count := range msg.Items {
+				if count > 0 {
+					clientItems[ws][item] = count
+				}
+			}
+			for item, count := range msg.Inventory {
+				if count > 0 {
+					clientInventory[ws][item] = count
+				}
+			}
+			mutex.Unlock()
+
+		// ===== НОВОЕ ДЕЙСТВИЕ "add" =====
+		case "add":
+			// Добавляем JSON-строку в хранилище
+			if msg.JSONData != "" {
+				mutex.Unlock()
+				addJSONData(msg.JSONData)
+			} else {
+				mutex.Unlock()
+			}
+		// ================================
+		
+		default:
+			mutex.Unlock()
 		}
+
+		mutex.Lock()
+		saveDailyData()
+		mutex.Unlock()
+	}
+}
+
+func countRecentSales(item string, since time.Time) int {
+	// Эта функция вызывается с уже заблокированным mutex
+	count := 0
+	for _, trade := range data.TradeHistory[item] {
+		if trade.Type == "sell" && trade.Time.After(since) {
+			count++
+		}
+	}
+	return count
+}
+
+func getItemCount(item string) int {
+	// Эта функция вызывается с уже заблокированным mutex
+	count := 0
+	for _, items := range clientItems {
+		count += items[item]
+	}
+	return count
+}
+
+func getInventoryCount(item string) int {
+	// Эта функция вызывается с уже заблокированным mutex
+	count := 0
+	for _, items := range clientInventory {
+		count += items[item]
+	}
+	return count
+}
+
+func getInventoryFreeSlots(itemType string) int {
+	// Эта функция вызывается с уже заблокированным mutex
+	count := 0
+	for _, items := range clientInventory {
+		for t, c := range items {
+			if itemsConfig[t].Type == itemType {
+				count += c
+			}
+		}
+	}
+	return inventoryLimit[itemType] - count
+}
+
+func countRecentBuys(item string, since time.Time) int {
+	// Эта функция вызывается с уже заблокированным mutex
+	count := 0
+	for _, trade := range data.TradeHistory[item] {
+		if trade.Type == "buy" && trade.Time.After(since) {
+			count++
+		}
+	}
+	return count
+}
+
+func countRecentTrySells(item string, since time.Time) int {
+	// Эта функция вызывается с уже заблокированным mutex
+	count := 0
+	for _, trade := range data.TradeHistory[item] {
+		if trade.Type == "try-sell" && trade.Time.After(since) {
+			count++
+		}
+	}
+	return count
+}
+
+func adjustPrice(item string) {
+	cfg, ok := itemsConfig[item]
+	if !ok {
+		return
+	}
+
+	mutex.Lock()
+	now := time.Now()
+
+	// Убираем проверку времени - она конфликтует с таймером
+	// lastUpdate, updatedBefore := swordTimes[item]
+	// if updatedBefore && now.Sub(lastUpdate) < cfg.AnalysisTime {
+	//     mutex.Unlock()
+	//     return
+	// }
+	
+	// Всегда обновляем время последнего анализа
+	swordTimes[item] = now
+
+	// Берем начало периода как AnalysisTime назад
+	lastUpdate := now.Add(-cfg.AnalysisTime)
+
+	sales := countRecentSales(item, lastUpdate)
+	buys := countRecentBuys(item, lastUpdate)
+	trySales := countRecentTrySells(item, lastUpdate)
+	newPrice := data.Prices[item]
+	priceBefore := newPrice
+	ratioBefore := data.Ratios[item]
+
+	salesRate := float64(cfg.NormalSales) / cfg.AnalysisTime.Minutes()
+	totalSalesRate := 0.0
+
+	for _, otherCfg := range itemsConfig {
+		if otherCfg.Type == cfg.Type {
+			totalSalesRate += float64(otherCfg.NormalSales) / otherCfg.AnalysisTime.Minutes()
+		}
+	}
+	if totalSalesRate == 0 {
+		totalSalesRate = 1
+	}
+	itemShare := salesRate / totalSalesRate
+
+	maxSlots := itemLimit[cfg.Type]
+	allocatedSlots := int(math.Round(itemShare * float64(maxSlots)))
+	if allocatedSlots < 1 {
+		allocatedSlots = 1
+	}
+
+	var (
+		totalTypeItems   int
+		currentItemCount int
+		totalInventory   int
+		inventoryCount   int
+	)
+
+	for _, items := range clientItems {
+		for name, count := range items {
+			if itemsConfig[name].Type == cfg.Type {
+				totalTypeItems += count
+			}
+			if name == item {
+				currentItemCount += count
+			}
+		}
+	}
+	for _, inv := range clientInventory {
+		for name, count := range inv {
+			if itemsConfig[name].Type == cfg.Type {
+				totalInventory += count
+			}
+			if name == item {
+				inventoryCount += count
+			}
+		}
+	}
+
+	inventoryFreeSlots := inventoryLimit[cfg.Type] - totalInventory
+	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
+
+	ratio := ratioBefore
+	if sales >= cfg.NormalSales {
+		expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
+		// expectedInventory := 2*math.Sqrt(float64(sales))
+		if sales >= 3 && (float64(buys) > expectedBuys) {
+			if ratio == 0.8 {
+				ratio = 0.75
+			}
+		} else if (buys < cfg.NormalSales) && inventoryFreeSlots > cfg.NormalSales {
+			if ratio == 0.75 {
+				ratio = 0.8
+			} else {
+				if freeSlots < allocatedSlots {
+					mutex.Unlock()
+					return
+				}
+				newPrice += cfg.PriceStep
+				if newPrice > cfg.MaxPrice {
+					newPrice = cfg.MaxPrice
+				}
+			}
+		}
+	} else {
+		allowedStock := cfg.NormalSales
+		if cfg.NormalSales <= 1 {
+			allowedStock += 2
+		} else if cfg.NormalSales <= 3 {
+			allowedStock += 1
+		}
+
+		if currentItemCount > allowedStock || trySales > cfg.NormalSales {
+			newPrice -= cfg.PriceStep
+			if newPrice < cfg.MinPrice {
+				newPrice = cfg.MinPrice
+			}
+		} else if inventoryFreeSlots > cfg.NormalSales {
+			if freeSlots < allocatedSlots {
+				mutex.Unlock()
+				return
+			}
+			if ratio == 0.75 {
+				ratio = 0.8
+			} else  if buys < cfg.NormalSales{
+				newPrice += cfg.PriceStep
+				if newPrice > cfg.MaxPrice {
+					newPrice = cfg.MaxPrice
+				}
+			}
+		}
+	}
+	if item == "порох" {
+		ratio = 0.7
+	}
+
+	if newPrice != priceBefore || ratio != ratioBefore {
+		// Сохраняем изменения
+		data.Prices[item] = newPrice
+		dailyData.Prices[item] = newPrice
+		data.Ratios[item] = ratio
+		dailyData.Ratios[item] = ratio
+		lastPriceUpdate[item] = now
+		mutex.Unlock()
+
+		log.Printf("[PRICE] %s: цена изменена с %d на %d", item, priceBefore, newPrice)
+
+		// Отправляем обновленные данные всем клиентам
+		sendPriceUpdateToClients()
+	} else {
+		mutex.Unlock()
 	}
 }
 
 func sendPriceUpdateToClients() {
-	dataMutex.RLock()
-	priceData := PriceAndRatio{
+	// Создаем копию данных для отправки
+	var priceData PriceAndRatio
+	
+	mutex.Lock()
+	priceData = PriceAndRatio{
 		Prices: make(map[string]int),
 		Ratios: make(map[string]float64),
 	}
@@ -716,29 +918,18 @@ func sendPriceUpdateToClients() {
 	for k, v := range data.Ratios {
 		priceData.Ratios[k] = v
 	}
-	dataMutex.RUnlock()
+	mutex.Unlock()
 
-	clientsMutex.RLock()
+	// Отправляем клиентам
+	mutex.Lock()
 	clientsCopy := make([]*websocket.Conn, 0, len(clients))
 	for client := range clients {
 		clientsCopy = append(clientsCopy, client)
 	}
-	clientsMutex.RUnlock()
+	mutex.Unlock()
 
 	for _, client := range clientsCopy {
-		clientsMutex.RLock()
-		clientData, exists := clients[client]
-		clientsMutex.RUnlock()
-		
-		if !exists {
-			continue
-		}
-
-		clientData.Mutex.Lock()
-		err := client.WriteJSON(priceData)
-		clientData.Mutex.Unlock()
-		
-		if err != nil {
+		if err := client.WriteJSON(priceData); err != nil {
 			log.Printf("Ошибка отправки обновления клиенту: %v", err)
 		}
 	}
@@ -751,10 +942,13 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		status = "⚠️"
 	}
 
-	// onlineCount := getOnlineCount()
-	onlineCount := 0
-	onHand, inInventory := getItemAndInventoryCount(item)
+	// Получаем онлайн с внешнего сервера
+	onlineCount := getOnlineCount()
 
+	// Получаем количество предметов на руках у клиентов
+	onHand, inInventory := getInventoryStats(item)
+
+	// Формируем сообщение
 	msg := fmt.Sprintf(
 		"*%s* %s\n"+
 			"⏳ Интервал: %s - %s\n"+
@@ -782,6 +976,7 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		onlineCount,
 	)
 
+	// Отправляем в Telegram
 	ctx := context.Background()
 	_, err := tgBot.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID:    -4633184325,
@@ -792,6 +987,7 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		log.Printf("[Telegram] Ошибка при отправке интервал-статы: %v", err)
 	}
 
+	// Сохраняем лог в файл
 	plainLog := fmt.Sprintf(
 		"%s [%s → %s] %s | Покупки: %.0f | Продажи: %.0f/%.0f | Цена: %d→%d | Коэф: %.2f→%.2f | На руках: %d | Онлайн: %d\n",
 		item,
