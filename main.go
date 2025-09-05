@@ -65,7 +65,7 @@ type ItemConfig struct {
 type ClientData struct {
 	Items     map[string]int
 	Inventory map[string]int
-	Mutex     sync.Mutex // Мьютекс для каждого клиента
+	Mutex     sync.Mutex
 }
 
 var (
@@ -142,7 +142,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Инициализация бота Telegram
 	b, err := bot.New(token)
 	if err != nil {
 		log.Printf("Error creating bot: %v", err)
@@ -150,7 +149,6 @@ func main() {
 	}
 	tgBot = b
 
-	// Проверка работы бота
 	ctx := context.Background()
 	_, err = tgBot.GetMe(ctx)
 	if err != nil {
@@ -244,12 +242,39 @@ func startItemTimers() {
 			for {
 				select {
 				case <-ticker.C:
+					startTime := time.Now().Add(-cfg.AnalysisTime)
+					
+					// Получаем статистику за предыдущий период
+					sales, buys, trySells, oldPrice, oldRatio := getItemStatsForReporting(item, startTime)
 					onHand, inInventory := getItemAndInventoryCount(item)
+					
+					// Логируем начало анализа
+					log.Printf("[ANALYSIS] %s: анализ с %s по %s. Продажи: %d (норма: %d)", 
+						item, startTime.Format("15:04:05"), time.Now().Format("15:04:05"), sales, cfg.NormalSales)
+					
+					// Обновляем цену
 					adjustPrice(item, onHand, inInventory)
+					
+					// Получаем новые данные после обновления
+					newPrice, newRatio := getCurrentPriceAndRatio(item)
+					
+					// Отправляем статистику за предыдущий период
+					go sendIntervalStatsToTelegram(
+						item,
+						startTime, time.Now(),
+						float64(sales), float64(cfg.NormalSales), float64(buys), float64(trySells),
+						float64(oldPrice), oldRatio, float64(newPrice), newRatio,
+					)
 				}
 			}
 		}(item, cfg)
 	}
+}
+
+func getCurrentPriceAndRatio(item string) (int, float64) {
+	dataMutex.RLock()
+	defer dataMutex.RUnlock()
+	return data.Prices[item], data.Ratios[item]
 }
 
 func getItemAndInventoryCount(item string) (int, int) {
@@ -274,6 +299,7 @@ func adjustPrice(item string, onHand, inInventory int) {
 	}
 
 	dataMutex.Lock()
+	defer dataMutex.Unlock()
 
 	now := time.Now()
 	lastUpdate := now.Add(-cfg.AnalysisTime)
@@ -298,13 +324,13 @@ func adjustPrice(item string, onHand, inInventory int) {
 	}
 	itemShare := salesRate / totalSalesRate
 
-	maxSlots := 24 * 3 // netherite_sword limit
+	maxSlots := 24 * 3
 	allocatedSlots := int(math.Round(itemShare * float64(maxSlots)))
 	if allocatedSlots < 1 {
 		allocatedSlots = 1
 	}
 
-	inventoryLimit := 28 * 3 * 3 // netherite_sword inventory limit
+	inventoryLimit := 28 * 3 * 3
 	inventoryFreeSlots := inventoryLimit - inInventory
 	freeSlots := maxSlots - (onHand)
 
@@ -321,7 +347,6 @@ func adjustPrice(item string, onHand, inInventory int) {
 				ratio = 0.8
 			} else {
 				if freeSlots < allocatedSlots {
-					dataMutex.Unlock()
 					return
 				}
 				newPrice += cfg.PriceStep
@@ -345,7 +370,6 @@ func adjustPrice(item string, onHand, inInventory int) {
 			}
 		} else if inventoryFreeSlots > cfg.NormalSales {
 			if freeSlots < allocatedSlots {
-				dataMutex.Unlock()
 				return
 			}
 			if ratio == 0.75 {
@@ -363,7 +387,6 @@ func adjustPrice(item string, onHand, inInventory int) {
 		data.Prices[item] = newPrice
 		data.Ratios[item] = ratio
 		lastPriceUpdate[item] = now
-		dataMutex.Unlock()
 
 		go func() {
 			dailyMutex.Lock()
@@ -376,10 +399,7 @@ func adjustPrice(item string, onHand, inInventory int) {
 		sendPriceUpdateToClients()
 		log.Printf("[PRICE] %s: цена изменена с %d на %d", item, priceBefore, newPrice)
 		
-		// Отправляем уведомление в Telegram об изменении цены
 		go sendPriceChangeNotification(item, priceBefore, newPrice, ratioBefore, ratio)
-	} else {
-		dataMutex.Unlock()
 	}
 }
 
@@ -427,6 +447,19 @@ func countRecentTrySellsLocked(item string, since time.Time) int {
 		}
 	}
 	return count
+}
+
+func getItemStatsForReporting(item string, since time.Time) (int, int, int, int, float64) {
+	dataMutex.RLock()
+	defer dataMutex.RUnlock()
+
+	sales := countRecentSalesLocked(item, since)
+	buys := countRecentBuysLocked(item, since)
+	trySells := countRecentTrySellsLocked(item, since)
+	price := data.Prices[item]
+	ratio := data.Ratios[item]
+
+	return sales, buys, trySells, price, ratio
 }
 
 func saveDailyDataNoMessageUpdate() {
@@ -709,19 +742,6 @@ func sendPriceUpdateToClients() {
 			log.Printf("Ошибка отправки обновления клиенту: %v", err)
 		}
 	}
-}
-
-func getItemStatsForReporting(item string, since time.Time) (int, int, int, int, float64) {
-	dataMutex.RLock()
-	defer dataMutex.RUnlock()
-
-	sales := countRecentSalesLocked(item, since)
-	buys := countRecentBuysLocked(item, since)
-	trySells := countRecentTrySellsLocked(item, since)
-	price := data.Prices[item]
-	ratio := data.Ratios[item]
-
-	return sales, buys, trySells, price, ratio
 }
 
 func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales, expectedSales, buyCount, trySellCount, 
