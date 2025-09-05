@@ -41,16 +41,10 @@ var (
 
 var itemLimit = map[string]int{
 	"netherite_sword": 24*3,
-	// "elytra":          24,
-	// "gunpowder":       8,
-	// "netherite_chestplate": 24,
 }
 
 var inventoryLimit = map[string]int{
 	"netherite_sword": 28*3*3,
-	// "elytra":          28 * 3,
-	// "gunpowder":       28,
-	// "netherite_chestplate": 28*3,
 }
 
 type ItemConfig struct {
@@ -111,6 +105,50 @@ var (
 			MaxPrice:     10000008,
 			Type:         "netherite_sword",
 		},
+		// 	BasePrice:    1000009,
+		// 	NormalSales:  11,
+		// 	PriceStep:    100000,
+		// 	AnalysisTime: 10 * time.Minute,
+		// 	MinPrice:     200009,
+		// 	MaxPrice:     30000009,
+		// 	Type:         "elytra",
+		// },
+		// "elytra-unbreak": {
+		// 	BasePrice:    1500010,
+		// 	NormalSales:  5,
+		// 	PriceStep:    100000,
+		// 	AnalysisTime: 10 * time.Minute,
+		// 	MinPrice:     300010,
+		// 	MaxPrice:     5000010,
+		// 	Type:         "elytra",
+		// },
+		// "порох": {
+		// 	BasePrice:    800011,
+		// 	NormalSales:  5,
+		// 	PriceStep:    100000,
+		// 	AnalysisTime: 10 * time.Minute,
+		// 	MinPrice:     600002,
+		// 	MaxPrice:     6000002,
+		// 	Type:         "gunpowder",
+		// },
+		// "нагрудник": {
+		// 	BasePrice:    500011,
+		// 	NormalSales:  5,
+		// 	PriceStep:    100000,
+		// 	AnalysisTime: 10 * time.Minute,
+		// 	MinPrice:     600002,
+		// 	MaxPrice:     6000002,
+		// 	Type:         "gunpowder",
+		// },
+		// "нагрудник2": {
+		// 	BasePrice:    1000011,
+		// 	NormalSales:  5,
+		// 	PriceStep:    100000,
+		// 	AnalysisTime: 10 * time.Minute,
+		// 	MinPrice:     600002,
+		// 	MaxPrice:     6000002,
+		// 	Type:         "gunpowder",
+		// },
 	}
 )
 
@@ -128,18 +166,6 @@ type Data struct {
 	LastTrade    map[string]time.Time
 	TradeHistory map[string][]TradeLog
 }
-
-// ===== НОВАЯ СТРУКТУРА ДЛЯ ВРЕМЕННОГО ХРАНИЛИЩА JSON =====
-type JSONEntry struct {
-	Data      string    // Храним именно строку, а не парсенный JSON
-	Timestamp time.Time
-}
-
-var (
-	jsonStore  []JSONEntry
-	storeMutex sync.Mutex
-)
-// =======================================================
 
 var (
 	data   = &Data{}
@@ -183,7 +209,6 @@ func main() {
 
 	// WebSocket сервер
 	http.HandleFunc("/ws", handleConnections)
-	
 	go func() {
 		log.Println("Server started on :8080")
 		log.Print(http.ListenAndServe(":8080", nil))
@@ -495,63 +520,6 @@ func saveDailyData() {
 	}
 }
 
-// ===== НОВЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С ВРЕМЕННЫМ ХРАНИЛИЩЕМ JSON =====
-func addJSONData(jsonStr string) {
-	storeMutex.Lock()
-	defer storeMutex.Unlock()
-
-	now := time.Now()
-	
-	// Очистка старых записей (старше 2 секунд)
-	var cleaned []JSONEntry
-	for _, entry := range jsonStore {
-		if now.Sub(entry.Timestamp) < 2*time.Second {
-			cleaned = append(cleaned, entry)
-		}
-	}
-	jsonStore = cleaned
-
-	// Добавляем новую запись
-	jsonStore = append(jsonStore, JSONEntry{
-		Data:      jsonStr,
-		Timestamp: now,
-	})
-
-	// Формируем массив строк для отправки
-	var data []string
-	for _, entry := range jsonStore {
-		data = append(data, entry.Data)
-	}
-
-	// Отправляем всем клиентам
-	sendJSONUpdateToClients(data)
-}
-
-func sendJSONUpdateToClients(data []string) {
-	// Создаем сообщение, которое клиенты поймут как обновление данных
-	msg := struct {
-		Action string   `json:"action"`
-		Data   []string `json:"data"`
-	}{
-		Action: "json_update", // Специальное действие для клиентов
-		Data:   data,
-	}
-
-	mutex.Lock()
-	clientsCopy := make([]*websocket.Conn, 0, len(clients))
-	for client := range clients {
-		clientsCopy = append(clientsCopy, client)
-	}
-	mutex.Unlock()
-
-	for _, client := range clientsCopy {
-		if err := client.WriteJSON(msg); err != nil {
-			log.Printf("Ошибка отправки JSON-обновления клиенту: %v", err)
-		}
-	}
-}
-// ===============================================================
-
 func handleConnections(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -606,8 +574,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			Type      string         `json:"type"`   // для buy/sell
 			Items     map[string]int `json:"items"`  // для presence
 			Inventory map[string]int `json:"inventory"`
-			// Новое поле для сырых JSON-данных
-			JSONData  string         `json:"json_data"` // для действия "add"
 		}
 
 		if err := json.Unmarshal(rawMsg, &msg); err != nil {
@@ -667,17 +633,6 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			}
 			mutex.Unlock()
 
-		// ===== НОВОЕ ДЕЙСТВИЕ "add" =====
-		case "add":
-			// Добавляем JSON-строку в хранилище
-			if msg.JSONData != "" {
-				mutex.Unlock()
-				addJSONData(msg.JSONData)
-			} else {
-				mutex.Unlock()
-			}
-		// ================================
-		
 		default:
 			mutex.Unlock()
 		}
@@ -776,7 +731,6 @@ func adjustPrice(item string) {
 
 	sales := countRecentSales(item, lastUpdate)
 	buys := countRecentBuys(item, lastUpdate)
-	trySales := countRecentTrySells(item, lastUpdate)
 	newPrice := data.Prices[item]
 	priceBefore := newPrice
 	ratioBefore := data.Ratios[item]
@@ -832,10 +786,10 @@ func adjustPrice(item string) {
 	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
 
 	ratio := ratioBefore
-	if sales >= cfg.NormalSales {
+		if sales >= cfg.NormalSales {
 		expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
-		// expectedInventory := 2*math.Sqrt(float64(sales))
-		if sales >= 3 && (float64(buys) > expectedBuys) {
+		expectedInventory := 2 * math.Sqrt(float64(sales))
+		if sales >= 3 && (float64(buys) > expectedBuys || float64(expectedInventory) < float64(inventoryCount)) {
 			if ratio == 0.8 {
 				ratio = 0.75
 			}
@@ -844,7 +798,6 @@ func adjustPrice(item string) {
 				ratio = 0.8
 			} else {
 				if freeSlots < allocatedSlots {
-					mutex.Unlock()
 					return
 				}
 				newPrice += cfg.PriceStep
@@ -861,28 +814,24 @@ func adjustPrice(item string) {
 			allowedStock += 1
 		}
 
-		if currentItemCount > allowedStock || trySales > cfg.NormalSales {
+		if currentItemCount > allowedStock {
 			newPrice -= cfg.PriceStep
 			if newPrice < cfg.MinPrice {
 				newPrice = cfg.MinPrice
 			}
 		} else if inventoryFreeSlots > cfg.NormalSales {
 			if freeSlots < allocatedSlots {
-				mutex.Unlock()
 				return
 			}
 			if ratio == 0.75 {
 				ratio = 0.8
-			} else  if buys < cfg.NormalSales{
+			} else if buys < cfg.NormalSales {
 				newPrice += cfg.PriceStep
 				if newPrice > cfg.MaxPrice {
 					newPrice = cfg.MaxPrice
 				}
 			}
 		}
-	}
-	if item == "порох" {
-		ratio = 0.7
 	}
 
 	if newPrice != priceBefore || ratio != ratioBefore {
