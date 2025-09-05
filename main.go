@@ -65,6 +65,7 @@ type ItemConfig struct {
 type ClientData struct {
 	Items     map[string]int
 	Inventory map[string]int
+	Mutex     sync.Mutex // Мьютекс для каждого клиента
 }
 
 var (
@@ -141,8 +142,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Инициализация бота Telegram с опциями
-	
+	// Инициализация бота Telegram
 	b, err := bot.New(token)
 	if err != nil {
 		log.Printf("Error creating bot: %v", err)
@@ -259,8 +259,10 @@ func getItemAndInventoryCount(item string) (int, int) {
 	onHand := 0
 	inInventory := 0
 	for _, clientData := range clients {
+		clientData.Mutex.Lock()
 		onHand += clientData.Items[item]
 		inInventory += clientData.Inventory[item]
+		clientData.Mutex.Unlock()
 	}
 	return onHand, inInventory
 }
@@ -660,8 +662,10 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 		case "presence":
 			clientsMutex.Lock()
+			clientData.Mutex.Lock()
 			clientData.Items = msg.Items
 			clientData.Inventory = msg.Inventory
+			clientData.Mutex.Unlock()
 			clientsMutex.Unlock()
 		}
 	}
@@ -682,9 +686,25 @@ func sendPriceUpdateToClients() {
 	dataMutex.RUnlock()
 
 	clientsMutex.RLock()
-	defer clientsMutex.RUnlock()
+	clientsCopy := make([]*websocket.Conn, 0, len(clients))
 	for client := range clients {
+		clientsCopy = append(clientsCopy, client)
+	}
+	clientsMutex.RUnlock()
+
+	for _, client := range clientsCopy {
+		clientsMutex.RLock()
+		clientData, exists := clients[client]
+		clientsMutex.RUnlock()
+		
+		if !exists {
+			continue
+		}
+
+		clientData.Mutex.Lock()
 		err := client.WriteJSON(priceData)
+		clientData.Mutex.Unlock()
+		
 		if err != nil {
 			log.Printf("Ошибка отправки обновления клиенту: %v", err)
 		}
