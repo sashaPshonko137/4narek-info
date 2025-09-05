@@ -751,7 +751,8 @@ func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales,
 		status = "⚠️"
 	}
 
-	onlineCount := getOnlineCount()
+	// onlineCount := getOnlineCount()
+	onlineCount := 0
 	onHand, inInventory := getItemAndInventoryCount(item)
 
 	msg := fmt.Sprintf(
