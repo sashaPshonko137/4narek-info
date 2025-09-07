@@ -41,10 +41,16 @@ var (
 
 var itemLimit = map[string]int{
 	"netherite_sword": 24*3,
+	// "elytra":          24,
+	// "gunpowder":       8,
+	// "netherite_chestplate": 24,
 }
 
 var inventoryLimit = map[string]int{
 	"netherite_sword": 28*3*3,
+	// "elytra":          28 * 3,
+	// "gunpowder":       28,
+	// "netherite_chestplate": 28*3,
 }
 
 type ItemConfig struct {
@@ -70,7 +76,7 @@ type DailyData struct {
 var (
 	itemsConfig = map[string]ItemConfig{
 		"sword6": {
-			BasePrice:    1500002,
+			BasePrice:    3300002,
 			NormalSales:  1,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -79,7 +85,7 @@ var (
 			Type:         "netherite_sword",
 		},
 		"sword7": {
-			BasePrice:    2000003,
+			BasePrice:    4200003,
 			NormalSales:  8,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -88,7 +94,7 @@ var (
 			Type:         "netherite_sword",
 		},
 		"sword5-unbreak": {
-			BasePrice:    1000004,
+			BasePrice:    1700004,
 			NormalSales:  10,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -97,7 +103,7 @@ var (
 			Type:         "netherite_sword",
 		},
 		"megasword": {
-			BasePrice:    3300008,
+			BasePrice:    5600008,
 			NormalSales:  2,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
@@ -105,50 +111,6 @@ var (
 			MaxPrice:     10000008,
 			Type:         "netherite_sword",
 		},
-		// 	BasePrice:    1000009,
-		// 	NormalSales:  11,
-		// 	PriceStep:    100000,
-		// 	AnalysisTime: 10 * time.Minute,
-		// 	MinPrice:     200009,
-		// 	MaxPrice:     30000009,
-		// 	Type:         "elytra",
-		// },
-		// "elytra-unbreak": {
-		// 	BasePrice:    1500010,
-		// 	NormalSales:  5,
-		// 	PriceStep:    100000,
-		// 	AnalysisTime: 10 * time.Minute,
-		// 	MinPrice:     300010,
-		// 	MaxPrice:     5000010,
-		// 	Type:         "elytra",
-		// },
-		// "порох": {
-		// 	BasePrice:    800011,
-		// 	NormalSales:  5,
-		// 	PriceStep:    100000,
-		// 	AnalysisTime: 10 * time.Minute,
-		// 	MinPrice:     600002,
-		// 	MaxPrice:     6000002,
-		// 	Type:         "gunpowder",
-		// },
-		// "нагрудник": {
-		// 	BasePrice:    500011,
-		// 	NormalSales:  5,
-		// 	PriceStep:    100000,
-		// 	AnalysisTime: 10 * time.Minute,
-		// 	MinPrice:     600002,
-		// 	MaxPrice:     6000002,
-		// 	Type:         "gunpowder",
-		// },
-		// "нагрудник2": {
-		// 	BasePrice:    1000011,
-		// 	NormalSales:  5,
-		// 	PriceStep:    100000,
-		// 	AnalysisTime: 10 * time.Minute,
-		// 	MinPrice:     600002,
-		// 	MaxPrice:     6000002,
-		// 	Type:         "gunpowder",
-		// },
 	}
 )
 
@@ -787,9 +749,9 @@ func adjustPrice(item string) {
 	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
 
 	ratio := ratioBefore
-		if sales >= cfg.NormalSales {
+	if sales >= cfg.NormalSales {
 		expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
-		expectedInventory := 2 * math.Sqrt(float64(sales))
+		expectedInventory := 2*math.Sqrt(float64(sales))
 		if sales >= 3 && (float64(buys) > expectedBuys || float64(expectedInventory) < float64(inventoryCount)) {
 			if ratio == 0.8 {
 				ratio = 0.75
@@ -799,6 +761,7 @@ func adjustPrice(item string) {
 				ratio = 0.8
 			} else {
 				if freeSlots < allocatedSlots {
+					mutex.Unlock()
 					return
 				}
 				newPrice += cfg.PriceStep
@@ -822,17 +785,21 @@ func adjustPrice(item string) {
 			}
 		} else if inventoryFreeSlots > cfg.NormalSales {
 			if freeSlots < allocatedSlots {
+				mutex.Unlock()
 				return
 			}
 			if ratio == 0.75 {
 				ratio = 0.8
-			} else if buys < cfg.NormalSales {
+			} else  if buys < cfg.NormalSales{
 				newPrice += cfg.PriceStep
 				if newPrice > cfg.MaxPrice {
 					newPrice = cfg.MaxPrice
 				}
 			}
 		}
+	}
+	if item == "порох" {
+		ratio = 0.7
 	}
 
 	if newPrice != priceBefore || ratio != ratioBefore {
