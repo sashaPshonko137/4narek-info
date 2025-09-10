@@ -860,7 +860,7 @@ func adjustPrice(item string) {
 			}
 			if ratio == 0.75 {
 				ratio = 0.8
-			} else if buys < cfg.NormalSales {
+			} else if buys < cfg.NormalSales && inventoryCount + currentItemCount < cfg.NormalSales {
 				newPrice += cfg.PriceStep
 				if newPrice > cfg.MaxPrice {
 					newPrice = cfg.MaxPrice
