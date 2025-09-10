@@ -574,15 +574,15 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 
-		log.Printf("[WS incoming] %s", string(rawMsg))
-
 		var msg struct {
 			Action    string                 `json:"action"`
 			Type      string                 `json:"type"`
 			Items     map[string]int         `json:"items"`
 			Inventory map[string]int         `json:"inventory"`
 		}
-
+		if msg.Action != "add" {
+			log.Printf("[WS incoming] %s", string(rawMsg))
+		}
 		if err := json.Unmarshal(rawMsg, &msg); err != nil {
 			log.Printf("json unmarshal error: %v", err)
 			continue
@@ -765,6 +765,7 @@ func adjustPrice(item string) {
 
 	sales := countRecentSales(item, lastUpdate)
 	buys := countRecentBuys(item, lastUpdate)
+	trySales := countRecentTrySells(item, lastUpdate)
 	newPrice := data.Prices[item]
 	priceBefore := newPrice
 	ratioBefore := data.Ratios[item]
@@ -847,12 +848,12 @@ func adjustPrice(item string) {
 			allowedStock += 1
 		}
 
-		if currentItemCount > allowedStock {
+		if currentItemCount > allowedStock || trySales > allowedStock {
 			newPrice -= cfg.PriceStep
 			if newPrice < cfg.MinPrice {
 				newPrice = cfg.MinPrice
 			}
-		} else if inventoryFreeSlots > cfg.NormalSales {
+		} else if inventoryFreeSlots - sales > cfg.NormalSales {
 			if freeSlots < allocatedSlots {
 				mutex.Unlock()
 				return
@@ -866,9 +867,6 @@ func adjustPrice(item string) {
 				}
 			}
 		}
-	}
-	if item == "порох" {
-		ratio = 0.7
 	}
 
 	if newPrice != priceBefore || ratio != ratioBefore {
