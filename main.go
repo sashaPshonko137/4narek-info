@@ -765,7 +765,7 @@ func adjustPrice(item string) {
 
 	sales := countRecentSales(item, lastUpdate)
 	buys := countRecentBuys(item, lastUpdate)
-	trySales := countRecentTrySells(item, lastUpdate)
+	// trySales := countRecentTrySells(item, lastUpdate)
 	newPrice := data.Prices[item]
 	priceBefore := newPrice
 	ratioBefore := data.Ratios[item]
@@ -848,7 +848,7 @@ func adjustPrice(item string) {
 			allowedStock += 1
 		}
 
-		if currentItemCount > allowedStock || trySales > allowedStock {
+		if currentItemCount > allowedStock || buys > allowedStock {
 			newPrice -= cfg.PriceStep
 			if newPrice < cfg.MinPrice {
 				newPrice = cfg.MinPrice
