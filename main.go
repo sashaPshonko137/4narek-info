@@ -779,7 +779,7 @@ func adjustPrice(item string) {
 
 	sales := countRecentSales(item, lastUpdate)
 	buys := countRecentBuys(item, lastUpdate)
-	trySales := countRecentTrySells(item, lastUpdate)
+	// trySales := countRecentTrySells(item, lastUpdate)
 	newPrice := data.Prices[item]
 	priceBefore := newPrice
 	ratioBefore := data.Ratios[item]
@@ -863,7 +863,7 @@ func adjustPrice(item string) {
 		}
 
 		if currentItemCount + inventoryCount + sales > allowedStock {
-			if trySales < cfg.NormalSales && currentItemCount + sales < allowedStock {
+			if currentItemCount + sales < cfg.NormalSales {
 				mutex.Unlock()
 				return				
 			}
