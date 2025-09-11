@@ -752,6 +752,20 @@ func countRecentTrySells(item string, since time.Time) int {
 	return count
 }
 
+func downRatio(ratio float64) float64 {
+	if ratio <= 0.75 {
+		return 0
+	}
+	return ratio - 0.5
+}
+
+func upRatio(ratio float64) float64 {
+	if ratio >= 0.85 {
+		return 0
+	}
+	return ratio + 0.5
+}
+
 func adjustPrice(item string) {
 	cfg, ok := itemsConfig[item]
 	if !ok {
@@ -765,7 +779,7 @@ func adjustPrice(item string) {
 
 	sales := countRecentSales(item, lastUpdate)
 	buys := countRecentBuys(item, lastUpdate)
-	// trySales := countRecentTrySells(item, lastUpdate)
+	trySales := countRecentTrySells(item, lastUpdate)
 	newPrice := data.Prices[item]
 	priceBefore := newPrice
 	ratioBefore := data.Ratios[item]
@@ -848,13 +862,17 @@ func adjustPrice(item string) {
 			allowedStock += 1
 		}
 
-		if currentItemCount + sales > allowedStock {
+		if currentItemCount + inventoryCount + sales > allowedStock {
+			if trySales < cfg.NormalSales && currentItemCount + sales < allowedStock {
+				mutex.Unlock()
+				return				
+			}
 			newPrice -= cfg.PriceStep
 			if newPrice < cfg.MinPrice {
 				newPrice = cfg.MinPrice
 			}
 		} else if inventoryFreeSlots - sales > cfg.NormalSales {
-			if freeSlots < allocatedSlots {
+			if freeSlots - sales < allocatedSlots {
 				mutex.Unlock()
 				return
 			}
