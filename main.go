@@ -834,7 +834,7 @@ func adjustPrice(item string) {
 	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
 
 	ratio := ratioBefore
-	if buys < sales || trySales == sales {
+	if (buys < sales && inventoryFreeSlots + sales > cfg.NormalSales) || trySales == sales {
 			if ratio == 0.75 {
 					ratio = 0.8
 			} else {
