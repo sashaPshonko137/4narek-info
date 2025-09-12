@@ -40,14 +40,14 @@ var (
 )
 
 var itemLimit = map[string]int{
-	"netherite_sword": 24 * 1,
+	"netherite_sword": 24 * 3,
 	// "elytra":          24,
 	// "gunpowder":       8,
 	// "netherite_chestplate": 24,
 }
 
 var inventoryLimit = map[string]int{
-	"netherite_sword": 28 * 3 * 1,
+	"netherite_sword": 28 * 3 * 3,
 	// "elytra":          28 * 3,
 	// "gunpowder":       28,
 	// "netherite_chestplate": 28*3,
@@ -828,85 +828,56 @@ func adjustPrice(item string) {
 			}
 		}
 	}
-		expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
-		expectedInventory := 2*math.Sqrt(float64(sales))
-	inventoryFreeSlots := inventoryLimit[cfg.Type] - totalInventory
+		// expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
+		// expectedInventory := 2*math.Sqrt(float64(sales))
+	// inventoryFreeSlots := inventoryLimit[cfg.Type] - totalInventory
 	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
 
 	ratio := ratioBefore
-	if (buys < sales && inventoryFreeSlots + sales > cfg.NormalSales) || trySales == sales {
-			if ratio == 0.75 {
-					ratio = 0.8
-			} else {
-				newPrice += cfg.PriceStep
-				if newPrice > cfg.MaxPrice {
-					newPrice = cfg.MaxPrice
-				}
-			}
-		} else if sales >= cfg.NormalSales {
-
-		if sales >= 3 && (float64(buys) > expectedBuys || float64(expectedInventory) < float64(inventoryCount)) {
-			if ratio == 0.8 {
-				ratio = 0.75
-			}
-		} else if (buys < cfg.NormalSales) && inventoryFreeSlots + sales > cfg.NormalSales {
-			if ratio == 0.75 {
-				ratio = 0.8
-			} else {
-				if freeSlots + sales < allocatedSlots {
-					mutex.Unlock()
-					return
-				}
-				newPrice += cfg.PriceStep
-				if newPrice > cfg.MaxPrice {
-					newPrice = cfg.MaxPrice
-				}
-			}
+	if (buys <= sales) || trySales == sales { // возможно повышение цены
+		if (freeSlots < sales-buys) {
+			mutex.Unlock()
+			return
 		}
-	} else {
-		allowedStock := cfg.NormalSales
-		if cfg.NormalSales <= 1 {
-			allowedStock += 2
-		} else if cfg.NormalSales <= 3 {
-			allowedStock += 1
+		newRatio := upRatio(ratio)
+		if newRatio == 0 {
+			newPrice += cfg.PriceStep
+			if newPrice > cfg.MaxPrice {
+				newPrice = cfg.MaxPrice
+			}
+		} else {
+			ratio = newRatio
 		}
-
-		if currentItemCount + sales > allowedStock {
-			if (buys < cfg.NormalSales && inventoryFreeSlots + buys >= cfg.NormalSales && currentItemCount + sales < cfg.NormalSales) {
-				if freeSlots + sales + currentItemCount < allocatedSlots {
-					mutex.Unlock()
-					return
-				}
-				if ratio == 0.75 {
-					ratio = 0.8
-				} else {
-					newPrice += cfg.PriceStep
-					if newPrice > cfg.MaxPrice {
-						newPrice = cfg.MaxPrice
-					}
-				}
+	} else if currentItemCount < cfg.NormalSales { // покупок нет
+		if (freeSlots < cfg.NormalSales-currentItemCount) {
+			mutex.Unlock()
+			return
+		}
+		newRatio := upRatio(ratio)
+		if newRatio == 0 {
+			newPrice += cfg.PriceStep
+			if newPrice > cfg.MaxPrice {
+				newPrice = cfg.MaxPrice
 			}
-			if currentItemCount + sales < cfg.NormalSales {
-				mutex.Unlock()
-				return				
-			}
+		} else {
+			ratio = newRatio
+		}
+	} else if currentItemCount > sales { // цена завышена
+		if sales < cfg.NormalSales { // не продаем
 			newPrice -= cfg.PriceStep
 			if newPrice < cfg.MinPrice {
 				newPrice = cfg.MinPrice
 			}
-		} else if inventoryFreeSlots + currentItemCount + sales > cfg.NormalSales {
-			if freeSlots + sales + currentItemCount < allocatedSlots {
-				mutex.Unlock()
-				return
-			}
-			if ratio == 0.75 {
-				ratio = 0.8
-			} else if buys < cfg.NormalSales && inventoryCount + currentItemCount + sales < cfg.NormalSales {
-				newPrice += cfg.PriceStep
-				if newPrice > cfg.MaxPrice {
-					newPrice = cfg.MaxPrice
+		} else  { // продажи в норме
+			newRatio := downRatio(ratio)
+			if newRatio == 0 {
+				newPrice -= cfg.PriceStep
+				if newPrice < cfg.MinPrice {
+					newPrice = cfg.MinPrice
 				}
-			}
+			} else {
+				ratio = newRatio
+			}			
 		}
 	}
 
