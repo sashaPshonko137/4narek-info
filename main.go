@@ -840,11 +840,11 @@ func adjustPrice(item string) {
 			if ratio == 0.8 {
 				ratio = 0.75
 			}
-		} else if (buys < cfg.NormalSales) && inventoryFreeSlots > cfg.NormalSales {
+		} else if (buys < cfg.NormalSales) && inventoryFreeSlots + sales > cfg.NormalSales {
 			if ratio == 0.75 {
 				ratio = 0.8
 			} else {
-				if freeSlots < allocatedSlots {
+				if freeSlots + sales < allocatedSlots {
 					mutex.Unlock()
 					return
 				}
@@ -863,7 +863,7 @@ func adjustPrice(item string) {
 		}
 
 		if currentItemCount + inventoryCount + sales > allowedStock {
-			if (buys < cfg.NormalSales && inventoryFreeSlots - buys >= cfg.NormalSales) {
+			if (buys < cfg.NormalSales && inventoryFreeSlots + buys >= cfg.NormalSales) {
 				if freeSlots + sales < allocatedSlots {
 					mutex.Unlock()
 					return
