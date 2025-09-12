@@ -779,7 +779,7 @@ func adjustPrice(item string) {
 
 	sales := countRecentSales(item, lastUpdate)
 	buys := countRecentBuys(item, lastUpdate)
-	// trySales := countRecentTrySells(item, lastUpdate)
+	trySales := countRecentTrySells(item, lastUpdate)
 	newPrice := data.Prices[item]
 	priceBefore := newPrice
 	ratioBefore := data.Ratios[item]
@@ -834,7 +834,7 @@ func adjustPrice(item string) {
 	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
 
 	ratio := ratioBefore
-	if float64(buys) < expectedBuys {
+	if float64(buys) < expectedBuys || trySales == sales {
 			if ratio == 0.75 {
 					ratio = 0.8
 			} else {
