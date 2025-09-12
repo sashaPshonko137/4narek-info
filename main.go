@@ -862,7 +862,16 @@ func adjustPrice(item string) {
 			allowedStock += 1
 		}
 
-		if currentItemCount + sales > allowedStock {
+		if sales > currentItemCount + inventoryCount && freeSlots + sales + currentItemCount >= allocatedSlots{
+			if ratio == 0.75 {
+					ratio = 0.8
+			} else {
+				newPrice += cfg.PriceStep
+				if newPrice > cfg.MaxPrice {
+					newPrice = cfg.MaxPrice
+				}
+			}
+		} else if currentItemCount + sales > allowedStock {
 			if (buys < cfg.NormalSales && inventoryFreeSlots + buys >= cfg.NormalSales && currentItemCount + sales < cfg.NormalSales) {
 				if freeSlots + sales + currentItemCount < allocatedSlots {
 					mutex.Unlock()
