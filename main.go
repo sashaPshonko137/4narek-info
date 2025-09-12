@@ -828,12 +828,13 @@ func adjustPrice(item string) {
 			}
 		}
 	}
-
+		expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
+		expectedInventory := 2*math.Sqrt(float64(sales))
 	inventoryFreeSlots := inventoryLimit[cfg.Type] - totalInventory
 	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
 
 	ratio := ratioBefore
-	if sales > currentItemCount + inventoryCount && freeSlots + sales + currentItemCount >= allocatedSlots{
+	if sales > currentItemCount + inventoryCount && freeSlots + sales + currentItemCount >= allocatedSlots && float64(buys) < expectedBuys {
 			if ratio == 0.75 {
 					ratio = 0.8
 			} else {
@@ -843,8 +844,7 @@ func adjustPrice(item string) {
 				}
 			}
 		} else if sales >= cfg.NormalSales {
-		expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
-		expectedInventory := 2*math.Sqrt(float64(sales))
+
 		if sales >= 3 && (float64(buys) > expectedBuys || float64(expectedInventory) < float64(inventoryCount)) {
 			if ratio == 0.8 {
 				ratio = 0.75
