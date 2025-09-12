@@ -834,7 +834,7 @@ func adjustPrice(item string) {
 	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
 
 	ratio := ratioBefore
-	if sales > currentItemCount + inventoryCount && freeSlots + sales + currentItemCount >= allocatedSlots && float64(buys) < expectedBuys {
+	if float64(buys) < expectedBuys {
 			if ratio == 0.75 {
 					ratio = 0.8
 			} else {
