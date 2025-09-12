@@ -871,14 +871,14 @@ func adjustPrice(item string) {
 			if newPrice < cfg.MinPrice {
 				newPrice = cfg.MinPrice
 			}
-		} else if inventoryFreeSlots - sales > cfg.NormalSales {
-			if freeSlots - sales < allocatedSlots {
+		} else if inventoryFreeSlots + currentItemCount + sales > cfg.NormalSales {
+			if freeSlots + sales < allocatedSlots {
 				mutex.Unlock()
 				return
 			}
 			if ratio == 0.75 {
 				ratio = 0.8
-			} else if buys < cfg.NormalSales && inventoryCount + currentItemCount < cfg.NormalSales {
+			} else if buys < cfg.NormalSales && inventoryCount + currentItemCount + sales < cfg.NormalSales {
 				newPrice += cfg.PriceStep
 				if newPrice > cfg.MaxPrice {
 					newPrice = cfg.MaxPrice
