@@ -833,7 +833,16 @@ func adjustPrice(item string) {
 	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
 
 	ratio := ratioBefore
-	if sales >= cfg.NormalSales {
+	if sales > currentItemCount + inventoryCount && freeSlots + sales + currentItemCount >= allocatedSlots{
+			if ratio == 0.75 {
+					ratio = 0.8
+			} else {
+				newPrice += cfg.PriceStep
+				if newPrice > cfg.MaxPrice {
+					newPrice = cfg.MaxPrice
+				}
+			}
+		} else if sales >= cfg.NormalSales {
 		expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
 		expectedInventory := 2*math.Sqrt(float64(sales))
 		if sales >= 3 && (float64(buys) > expectedBuys || float64(expectedInventory) < float64(inventoryCount)) {
@@ -862,16 +871,7 @@ func adjustPrice(item string) {
 			allowedStock += 1
 		}
 
-		if sales > currentItemCount + inventoryCount && freeSlots + sales + currentItemCount >= allocatedSlots{
-			if ratio == 0.75 {
-					ratio = 0.8
-			} else {
-				newPrice += cfg.PriceStep
-				if newPrice > cfg.MaxPrice {
-					newPrice = cfg.MaxPrice
-				}
-			}
-		} else if currentItemCount + sales > allowedStock {
+		if currentItemCount + sales > allowedStock {
 			if (buys < cfg.NormalSales && inventoryFreeSlots + buys >= cfg.NormalSales && currentItemCount + sales < cfg.NormalSales) {
 				if freeSlots + sales + currentItemCount < allocatedSlots {
 					mutex.Unlock()
