@@ -860,6 +860,9 @@ func adjustPrice(item string) {
 		}
 	} else if currentItemCount + inventoryCount > sales*2 { // цена завышена
 		if sales < cfg.NormalSales { // не продаем
+			if ratio > 0.8 {
+				ratio = 0.8
+			}
 			newPrice -= cfg.PriceStep
 			if newPrice < cfg.MinPrice {
 				newPrice = cfg.MinPrice
