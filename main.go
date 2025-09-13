@@ -828,85 +828,52 @@ func adjustPrice(item string) {
 			}
 		}
 	}
-		expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
-		expectedInventory := 2*math.Sqrt(float64(sales))
-	inventoryFreeSlots := inventoryLimit[cfg.Type] - totalInventory
+	// expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
+	// expectedInventory := 2*math.Sqrt(float64(sales))
+	// inventoryFreeSlots := inventoryLimit[cfg.Type] - totalInventory
 	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
 
 	ratio := ratioBefore
-	if (buys < sales || trySales == sales) && inventoryFreeSlots > cfg.NormalSales {
-		if ratio == 0.75 {
-			ratio = 0.8
-		} else {
+	if (buys <= sales || trySales == sales) && currentItemCount <= sales { // возможно повышение цены
+		newRatio := upRatio(ratio)
+		if newRatio == 0 {
 			newPrice += cfg.PriceStep
 			if newPrice > cfg.MaxPrice {
 				newPrice = cfg.MaxPrice
 			}
+		} else {
+			ratio = newRatio
 		}
-	} else if sales >= cfg.NormalSales {
-
-		if sales >= 3 && (float64(buys) > expectedBuys || float64(expectedInventory) < float64(inventoryCount)) {
-			if ratio == 0.8 {
-				ratio = 0.75
-			}
-		} else if (buys < cfg.NormalSales) && inventoryFreeSlots + sales > cfg.NormalSales {
-			if ratio == 0.75 {
-				ratio = 0.8
-			} else {
-				if freeSlots + sales < allocatedSlots {
-					mutex.Unlock()
-					return
-				}
-				newPrice += cfg.PriceStep
-				if newPrice > cfg.MaxPrice {
-					newPrice = cfg.MaxPrice
-				}
-			}
+	} else if currentItemCount < cfg.NormalSales { // покупок нет
+		if (freeSlots < cfg.NormalSales-currentItemCount) {
+			mutex.Unlock()
+			return
 		}
-	} else {
-		allowedStock := cfg.NormalSales
-		if cfg.NormalSales <= 1 {
-			allowedStock += 2
-		} else if cfg.NormalSales <= 3 {
-			allowedStock += 1
+		newRatio := upRatio(ratio)
+		if newRatio == 0 {
+			newPrice += cfg.PriceStep
+			if newPrice > cfg.MaxPrice {
+				newPrice = cfg.MaxPrice
+			}
+		} else {
+			ratio = newRatio
 		}
-
-		if currentItemCount + sales > allowedStock {
-			if (buys < cfg.NormalSales && inventoryFreeSlots + buys >= cfg.NormalSales && currentItemCount + sales < cfg.NormalSales) {
-				if freeSlots + sales + currentItemCount < allocatedSlots {
-					mutex.Unlock()
-					return
-				}
-				if ratio == 0.75 {
-					ratio = 0.8
-				} else {
-					newPrice += cfg.PriceStep
-					if newPrice > cfg.MaxPrice {
-						newPrice = cfg.MaxPrice
-					}
-				}
-			}
-			if currentItemCount + sales < cfg.NormalSales {
-				mutex.Unlock()
-				return				
-			}
+	} else if currentItemCount > sales { // цена завышена
+		if sales < cfg.NormalSales { // не продаем
 			newPrice -= cfg.PriceStep
 			if newPrice < cfg.MinPrice {
 				newPrice = cfg.MinPrice
 			}
-		} else if inventoryFreeSlots + currentItemCount + sales > cfg.NormalSales {
-			if freeSlots + sales + currentItemCount < allocatedSlots {
-				mutex.Unlock()
-				return
-			}
-			if ratio == 0.75 {
-				ratio = 0.8
-			} else if buys < cfg.NormalSales && inventoryCount + currentItemCount + sales < cfg.NormalSales {
-				newPrice += cfg.PriceStep
-				if newPrice > cfg.MaxPrice {
-					newPrice = cfg.MaxPrice
+		} else  { // продажи в норме
+			newRatio := downRatio(ratio)
+			if newRatio == 0 {
+				newPrice -= cfg.PriceStep
+				if newPrice < cfg.MinPrice {
+					newPrice = cfg.MinPrice
 				}
-			}
+			} else {
+				ratio = newRatio
+			}			
 		}
 	}
 
@@ -930,7 +897,6 @@ func adjustPrice(item string) {
 		mutex.Unlock()
 	}
 }
-
 func sendIntervalStatsToTelegram(item string, start, end time.Time, actualSales, expectedSales, buyCount, trySellCount,
 	oldPrice, oldRatio, newPrice, newRatio float64) {
 	status := "✅"
