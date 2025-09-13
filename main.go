@@ -859,10 +859,6 @@ func adjustPrice(item string) {
 			ratio = newRatio
 		}
 	} else if currentItemCount > sales*2 { // цена завышена
-		if inventoryFreeSlots + buys < sales {
-			mutex.Unlock()
-			return
-		}
 		if sales < cfg.NormalSales { // не продаем
 			newPrice -= cfg.PriceStep
 			if newPrice < cfg.MinPrice {
