@@ -756,14 +756,14 @@ func downRatio(ratio float64) float64 {
 	if ratio <= 0.75 {
 		return 0
 	}
-	return ratio - 0.5
+	return ratio - 0.05
 }
 
 func upRatio(ratio float64) float64 {
 	if ratio >= 0.85 {
 		return 0
 	}
-	return ratio + 0.5
+	return ratio + 0.05
 }
 
 func adjustPrice(item string) {
