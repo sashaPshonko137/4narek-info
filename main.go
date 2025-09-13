@@ -779,7 +779,7 @@ func adjustPrice(item string) {
 
 	sales := countRecentSales(item, lastUpdate)
 	buys := countRecentBuys(item, lastUpdate)
-	trySales := countRecentTrySells(item, lastUpdate)
+	// trySales := countRecentTrySells(item, lastUpdate)
 	newPrice := data.Prices[item]
 	priceBefore := newPrice
 	ratioBefore := data.Ratios[item]
@@ -834,7 +834,7 @@ func adjustPrice(item string) {
 	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
 
 	ratio := ratioBefore
-	if (buys <= sales || trySales == sales) && currentItemCount <= sales*2 { // возможно повышение цены
+	if (buys <= sales) && currentItemCount <= sales*2 { // возможно повышение цены
 		newRatio := upRatio(ratio)
 		if newRatio == 0 {
 			newPrice += cfg.PriceStep
