@@ -40,14 +40,14 @@ var (
 )
 
 var itemLimit = map[string]int{
-	"netherite_sword": 24 * 3,
+	"netherite_sword": 24 * 2,
 	// "elytra":          24,
 	// "gunpowder":       8,
 	// "netherite_chestplate": 24,
 }
 
 var inventoryLimit = map[string]int{
-	"netherite_sword": 28 * 3 * 3,
+	"netherite_sword": 28 * 3 * 2,
 	// "elytra":          28 * 3,
 	// "gunpowder":       28,
 	// "netherite_chestplate": 28*3,
