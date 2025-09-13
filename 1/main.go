@@ -834,11 +834,7 @@ func adjustPrice(item string) {
 	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
 
 	ratio := ratioBefore
-	if (buys <= sales) || trySales == sales { // возможно повышение цены
-		if (freeSlots < sales-buys) {
-			mutex.Unlock()
-			return
-		}
+	if (buys <= sales || trySales == sales) && currentItemCount < sales { // возможно повышение цены
 		newRatio := upRatio(ratio)
 		if newRatio == 0 {
 			newPrice += cfg.PriceStep
