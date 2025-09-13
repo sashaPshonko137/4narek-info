@@ -830,7 +830,7 @@ func adjustPrice(item string) {
 	}
 	// expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
 	// expectedInventory := 2*math.Sqrt(float64(sales))
-	inventoryFreeSlots := inventoryLimit[cfg.Type] - totalInventory
+	// inventoryFreeSlots := inventoryLimit[cfg.Type] - totalInventory
 	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
 
 	ratio := ratioBefore
