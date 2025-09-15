@@ -77,7 +77,7 @@ var (
 	itemsConfig = map[string]ItemConfig{
 		"sword6": {
 			BasePrice:    3300002,
-			NormalSales:  4,
+			NormalSales:  6,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice:     600002,
@@ -86,7 +86,7 @@ var (
 		},
 		"sword7": {
 			BasePrice:    4200003,
-			NormalSales:  8,
+			NormalSales:  10,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice:     700003,
@@ -95,7 +95,7 @@ var (
 		},
 		"sword5-unbreak": {
 			BasePrice:    1700004,
-			NormalSales:  10,
+			NormalSales:  14,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice:     500004,
@@ -104,7 +104,7 @@ var (
 		},
 		"megasword": {
 			BasePrice:    5600008,
-			NormalSales:  2,
+			NormalSales:  3,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice:     1200008,
