@@ -844,7 +844,7 @@ func adjustPrice(item string) {
 		} else {
 			ratio = newRatio
 		}
-	} else if currentItemCount < cfg.NormalSales { // покупок нет
+	} else if currentItemCount+inventoryCount < cfg.NormalSales { // покупок нет
 		if (freeSlots < cfg.NormalSales-currentItemCount) {
 			mutex.Unlock()
 			return
