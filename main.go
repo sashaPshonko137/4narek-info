@@ -858,7 +858,7 @@ func adjustPrice(item string) {
 		} else {
 			ratio = newRatio
 		}
-	} else if currentItemCount + inventoryCount > sales*2 { // цена завышена
+	} else if currentItemCount + inventoryCount > sales*2 && currentItemCount > sales { // цена завышена
 		if sales < cfg.NormalSales { // не продаем
 			if ratio > 0.8 {
 				ratio = 0.8
