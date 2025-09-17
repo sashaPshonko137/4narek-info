@@ -41,16 +41,12 @@ var (
 
 var itemLimit = map[string]int{
 	"netherite_sword": 24 * 3,
-	// "elytra":          24,
-	// "gunpowder":       8,
-	// "netherite_chestplate": 24,
+	"netherite_leggings": 28*3,
 }
 
 var inventoryLimit = map[string]int{
 	"netherite_sword": 28 * 3 * 3,
-	// "elytra":          28 * 3,
-	// "gunpowder":       28,
-	// "netherite_chestplate": 28*3,
+	"netherite_leggings": 28*3,
 }
 
 type ItemConfig struct {
@@ -110,6 +106,24 @@ var (
 			MinPrice:     1200008,
 			MaxPrice:     10000008,
 			Type:         "netherite_sword",
+		},
+		"штаны-непроперженные": {
+			BasePrice:    3500009,
+			NormalSales:  4,
+			PriceStep:    100000,
+			AnalysisTime: 10 * time.Minute,
+			MinPrice:     1200009,
+			MaxPrice:     10000009,
+			Type:         "netherite_leggings",
+		},
+		"штаны-парадные": {
+			BasePrice:    8500010,
+			NormalSales:  5,
+			PriceStep:    100000,
+			AnalysisTime: 10 * time.Minute,
+			MinPrice:     1200010,
+			MaxPrice:     10000010,
+			Type:         "netherite_leggings",
 		},
 	}
 )
