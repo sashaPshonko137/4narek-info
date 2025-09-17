@@ -835,45 +835,23 @@ func adjustPrice(item string) {
 
 	ratio := ratioBefore
 	if (buys <= sales || trySales == sales) && currentItemCount <= sales { // возможно повышение цены
-		newRatio := upRatio(ratio)
-		if newRatio == 0 {
-			newPrice += cfg.PriceStep
-			if newPrice > cfg.MaxPrice {
-				newPrice = cfg.MaxPrice
-			}
-		} else {
-			ratio = newRatio
+		newPrice += cfg.PriceStep
+		if newPrice > cfg.MaxPrice {
+			newPrice = cfg.MaxPrice
 		}
 	} else if currentItemCount < cfg.NormalSales { // покупок нет
 		if (freeSlots < cfg.NormalSales-currentItemCount) {
 			mutex.Unlock()
 			return
 		}
-		newRatio := upRatio(ratio)
-		if newRatio == 0 {
-			newPrice += cfg.PriceStep
-			if newPrice > cfg.MaxPrice {
-				newPrice = cfg.MaxPrice
-			}
-		} else {
-			ratio = newRatio
+		newPrice += cfg.PriceStep
+		if newPrice > cfg.MaxPrice {
+			newPrice = cfg.MaxPrice
 		}
 	} else if currentItemCount > sales { // цена завышена
-		if sales < cfg.NormalSales { // не продаем
-			newPrice -= cfg.PriceStep
-			if newPrice < cfg.MinPrice {
-				newPrice = cfg.MinPrice
-			}
-		} else  { // продажи в норме
-			newRatio := downRatio(ratio)
-			if newRatio == 0 {
-				newPrice -= cfg.PriceStep
-				if newPrice < cfg.MinPrice {
-					newPrice = cfg.MinPrice
-				}
-			} else {
-				ratio = newRatio
-			}			
+		newPrice -= cfg.PriceStep
+		if newPrice < cfg.MinPrice {
+			newPrice = cfg.MinPrice
 		}
 	}
 
