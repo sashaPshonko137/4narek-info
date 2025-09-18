@@ -845,7 +845,7 @@ func adjustPrice(item string) {
 	// expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
 	// expectedInventory := 2*math.Sqrt(float64(sales))
 	// inventoryFreeSlots := inventoryLimit[cfg.Type] - totalInventory
-	freeSlots := maxSlots - (totalTypeItems - currentItemCount)
+	// freeSlots := maxSlots - (totalTypeItems - currentItemCount)
 
 	ratio := ratioBefore
 	if (buys <= sales) && currentItemCount+inventoryCount <= sales*2 { // возможно повышение цены
@@ -854,15 +854,11 @@ func adjustPrice(item string) {
 				newPrice = cfg.MaxPrice
 			}
 	} else if currentItemCount+inventoryCount < cfg.NormalSales { // покупок нет
-		if (freeSlots < cfg.NormalSales-currentItemCount) {
-			mutex.Unlock()
-			return
-		}
 			newPrice += cfg.PriceStep
 			if newPrice > cfg.MaxPrice {
 				newPrice = cfg.MaxPrice
 			}
-	} else if currentItemCount + inventoryCount > sales*2 && currentItemCount > cfg.NormalSales { // цена завышена
+	} else if currentItemCount + inventoryCount > sales { // цена завышена
 			newPrice -= cfg.PriceStep
 			if newPrice < cfg.MinPrice {
 				newPrice = cfg.MinPrice
