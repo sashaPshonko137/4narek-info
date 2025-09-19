@@ -793,7 +793,7 @@ func adjustPrice(item string) {
 
 	sales := countRecentSales(item, lastUpdate)
 	buys := countRecentBuys(item, lastUpdate)
-	// trySales := countRecentTrySells(item, lastUpdate)
+
 	newPrice := data.Prices[item]
 	priceBefore := newPrice
 	ratioBefore := data.Ratios[item]
@@ -817,11 +817,13 @@ func adjustPrice(item string) {
 		allocatedSlots = 1
 	}
 
-	totalTypeItems := 0
-	currentItemCount := 0
-	totalInventory := 0
-	inventoryCount := 0
+	// --- 🔥 НОВЫЙ КОД: сбор статистики по типу предмета без лишних lock'ов ---
+	totalTypeItems := 0        // все предметы типа cfg.Type на аукционе
+	currentItemCount := 0      // текущий предмет на аукционе
+	totalInventory := 0        // все предметы типа cfg.Type в инвентарях
+	inventoryCount := 0        // текущий предмет в инвентарях
 
+	// Проходим по всем клиентам — без mutex, потому что мы уже его держим!
 	for _, items := range clientItems {
 		for name, count := range items {
 			if itemsConfig[name].Type == cfg.Type {
@@ -832,6 +834,7 @@ func adjustPrice(item string) {
 			}
 		}
 	}
+
 	for _, inv := range clientInventory {
 		for name, count := range inv {
 			if itemsConfig[name].Type == cfg.Type {
@@ -842,27 +845,29 @@ func adjustPrice(item string) {
 			}
 		}
 	}
-	// expectedBuys := float64(sales) + 1.5*math.Sqrt(float64(sales))
-	// expectedInventory := 2*math.Sqrt(float64(sales))
-	// inventoryFreeSlots := inventoryLimit[cfg.Type] - totalInventory
-	// freeSlots := maxSlots - (totalTypeItems - currentItemCount)
+
+	// Теперь считаем свободные слоты — уже имея totalInventory
+	// freeInventorySlots := inventoryLimit[cfg.Type] - totalInventory
+
+	// --- ✅ Больше нет вызова getInventoryFreeSlots() — дедлок исчез!
+	// --- ✅ Все данные собраны внутри уже захваченного mutex — безопасно!
 
 	ratio := ratioBefore
-	if (buys <= sales) && currentItemCount+inventoryCount <= sales*2 { // возможно повышение цены
-			newPrice += cfg.PriceStep
-			if newPrice > cfg.MaxPrice {
-				newPrice = cfg.MaxPrice
-			}
-	} else if currentItemCount+inventoryCount < cfg.NormalSales { // покупок нет
-			newPrice += cfg.PriceStep
-			if newPrice > cfg.MaxPrice {
-				newPrice = cfg.MaxPrice
-			}
-	} else if currentItemCount + inventoryCount > sales { // цена завышена
-			newPrice -= cfg.PriceStep
-			if newPrice < cfg.MinPrice {
-				newPrice = cfg.MinPrice
-			}
+	if (buys <= sales) && currentItemCount+inventoryCount <= sales*2 {
+		newPrice += cfg.PriceStep
+		if newPrice > cfg.MaxPrice {
+			newPrice = cfg.MaxPrice
+		}
+	} else if currentItemCount+inventoryCount < cfg.NormalSales {
+		newPrice += cfg.PriceStep
+		if newPrice > cfg.MaxPrice {
+			newPrice = cfg.MaxPrice
+		}
+	} else if currentItemCount+inventoryCount > sales {
+		newPrice -= cfg.PriceStep
+		if newPrice < cfg.MinPrice {
+			newPrice = cfg.MinPrice
+		}
 	}
 
 	if newPrice != priceBefore || ratio != ratioBefore {
@@ -871,7 +876,7 @@ func adjustPrice(item string) {
 		data.Ratios[item] = ratio
 		dailyData.Ratios[item] = ratio
 		lastPriceUpdate[item] = now
-		mutex.Unlock()
+		mutex.Unlock() // 👈 Освобождаем мьютекс перед рассылкой
 
 		log.Printf("[PRICE] %s: цена изменена с %d на %d", item, priceBefore, newPrice)
 		select {
