@@ -871,7 +871,7 @@ func adjustPrice(item string) {
 	// --- ✅ Все данные собраны внутри уже захваченного mutex — безопасно!
 
 	ratio := ratioBefore
-	if currentItemCount+inventoryCount < cfg.NormalSales*2{
+    if currentItemCount+inventoryCount < cfg.NormalSales*2{
 		newPrice += cfg.PriceStep
 		if newPrice > cfg.MaxPrice {
 			newPrice = cfg.MaxPrice
