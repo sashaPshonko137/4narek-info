@@ -82,7 +82,7 @@ var (
 		},
 		"sword7": {
 			BasePrice:    4200003,
-			NormalSales:  10,
+			NormalSales:  8,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice:     700003,
@@ -91,7 +91,7 @@ var (
 		},
 		"sword5-unbreak": {
 			BasePrice:    1700004,
-			NormalSales:  14,
+			NormalSales:  10,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice:     500004,
@@ -100,7 +100,7 @@ var (
 		},
 		"megasword": {
 			BasePrice:    5600008,
-			NormalSales:  3,
+			NormalSales:  5,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice:     1200008,
@@ -127,7 +127,7 @@ var (
 		},
 		"элитры5": {
 			BasePrice:    2000011,
-			NormalSales:  5,
+			NormalSales:  10,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice:     500011,
@@ -136,7 +136,7 @@ var (
 		},
 		"элитры": {
 			BasePrice:    1400012,
-			NormalSales:  5,
+			NormalSales:  10,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice:     700012,
