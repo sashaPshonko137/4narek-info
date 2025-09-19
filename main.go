@@ -125,6 +125,24 @@ var (
 			MaxPrice:     10000010,
 			Type:         "netherite_leggings",
 		},
+		"элитры5": {
+			BasePrice:    2000011,
+			NormalSales:  5,
+			PriceStep:    100000,
+			AnalysisTime: 10 * time.Minute,
+			MinPrice:     500011,
+			MaxPrice:     10000011,
+			Type:         "elytra",
+		},
+		"элитры крутые": {
+			BasePrice:    4000010,
+			NormalSales:  5,
+			PriceStep:    100000,
+			AnalysisTime: 10 * time.Minute,
+			MinPrice:     700011,
+			MaxPrice:     10000011,
+			Type:         "elytra",
+		},
 	}
 )
 
@@ -858,7 +876,7 @@ func adjustPrice(item string) {
 		if newPrice > cfg.MaxPrice {
 			newPrice = cfg.MaxPrice
 		}
-	} else if currentItemCount+inventoryCount < cfg.NormalSales*2 {
+	} else if currentItemCount+inventoryCount < cfg.NormalSales*2{
 		newPrice += cfg.PriceStep
 		if newPrice > cfg.MaxPrice {
 			newPrice = cfg.MaxPrice
