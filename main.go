@@ -876,7 +876,7 @@ func adjustPrice(item string) {
 		if newPrice > cfg.MaxPrice {
 			newPrice = cfg.MaxPrice
 		}
-	} else if (currentItemCount > sales && currentItemCount > cfg.NormalSales) || (inventoryCount > sales && inventoryCount > cfg.NormalSales * 3) {
+	} else if (currentItemCount > sales && currentItemCount > cfg.NormalSales) || (inventoryCount > sales * 3 && inventoryCount > cfg.NormalSales) {
 		newPrice -= cfg.PriceStep
 		if newPrice < cfg.MinPrice {
 			newPrice = cfg.MinPrice
