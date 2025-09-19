@@ -134,8 +134,8 @@ var (
 			MaxPrice:     10000011,
 			Type:         "elytra",
 		},
-		"элитры крутые": {
-			BasePrice:    4000012,
+		"элитры": {
+			BasePrice:    1400012,
 			NormalSales:  5,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
