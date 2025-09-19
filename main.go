@@ -853,17 +853,17 @@ func adjustPrice(item string) {
 	// --- ✅ Все данные собраны внутри уже захваченного mutex — безопасно!
 
 	ratio := ratioBefore
-	if (buys <= sales) && currentItemCount+inventoryCount <= sales*2 {
+	if (buys <= sales) && currentItemCount+inventoryCount <= sales*3 {
 		newPrice += cfg.PriceStep
 		if newPrice > cfg.MaxPrice {
 			newPrice = cfg.MaxPrice
 		}
-	} else if currentItemCount+inventoryCount < cfg.NormalSales {
+	} else if currentItemCount+inventoryCount < int(float64(cfg.NormalSales)*1.5) {
 		newPrice += cfg.PriceStep
 		if newPrice > cfg.MaxPrice {
 			newPrice = cfg.MaxPrice
 		}
-	} else if currentItemCount+inventoryCount > sales {
+	} else if currentItemCount > sales {
 		newPrice -= cfg.PriceStep
 		if newPrice < cfg.MinPrice {
 			newPrice = cfg.MinPrice
