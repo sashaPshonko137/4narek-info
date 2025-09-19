@@ -719,21 +719,32 @@ func countRecentSales(item string, since time.Time) int {
 }
 
 func getItemCount(item string) int {
+	mutex.Lock()
+	defer mutex.Unlock()
+
 	count := 0
-	for _, items := range clientItems {
-		count += items[item]
+	for client, items := range clientItems {
+		// Проверяем, активно ли соединение
+		if clients[client] {
+			count += items[item]
+		}
 	}
 	return count
 }
 
 func getInventoryCount(item string) int {
+	mutex.Lock()
+	defer mutex.Unlock()
+
 	count := 0
-	for _, items := range clientInventory {
-		count += items[item]
+	for client, inventory := range clientInventory {
+		// Проверяем, активно ли соединение
+		if clients[client] {
+			count += inventory[item]
+		}
 	}
 	return count
 }
-
 func getInventoryFreeSlots(itemType string) int {
 	count := 0
 	for _, items := range clientInventory {
