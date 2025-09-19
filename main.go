@@ -127,7 +127,7 @@ var (
 		},
 		"элитры5": {
 			BasePrice:    2000011,
-			NormalSales:  10,
+			NormalSales:  7,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice:     500011,
@@ -136,7 +136,7 @@ var (
 		},
 		"элитры": {
 			BasePrice:    1400012,
-			NormalSales:  10,
+			NormalSales:  7,
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice:     700012,
