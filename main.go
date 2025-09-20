@@ -810,7 +810,7 @@ func adjustPrice(item string) {
 	lastUpdate := now.Add(-cfg.AnalysisTime)
 
 	sales := countRecentSales(item, lastUpdate)
-	// buys := countRecentBuys(item, lastUpdate)
+	buys := countRecentBuys(item, lastUpdate)
 
 	newPrice := data.Prices[item]
 	priceBefore := newPrice
@@ -877,6 +877,11 @@ func adjustPrice(item string) {
 			newPrice = cfg.MaxPrice
 		}
 	} else if ((currentItemCount > sales && currentItemCount > cfg.NormalSales) && (inventoryCount > sales * 3 && inventoryCount > cfg.NormalSales)) && sales < cfg.NormalSales {
+		newPrice -= cfg.PriceStep
+		if newPrice < cfg.MinPrice {
+			newPrice = cfg.MinPrice
+		}
+	} else  if ((currentItemCount > sales && currentItemCount > cfg.NormalSales) && (inventoryCount > sales * 3 && inventoryCount > cfg.NormalSales)) && buys > sales {
 		newPrice -= cfg.PriceStep
 		if newPrice < cfg.MinPrice {
 			newPrice = cfg.MinPrice
