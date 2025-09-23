@@ -104,7 +104,7 @@ var (
 			PriceStep:    100000,
 			AnalysisTime: 10 * time.Minute,
 			MinPrice:     1200008,
-			MaxPrice:     10000008,
+			MaxPrice:     9900008,
 			Type:         "netherite_sword",
 		},
 		"штаны-непроперженные": {
